@@ -2,20 +2,139 @@
   const button=document.querySelector('#download-image');
   if(!button)return;
   const $=selector=>document.querySelector(selector);
+  const HTML2CANVAS_SOURCES=[
+    {
+      src:'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+      integrity:'sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=='
+    },
+    {
+      src:'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+      integrity:'sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=='
+    },
+    {
+      src:'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js',
+      integrity:'sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=='
+    }
+  ];
+  const IMAGE_PROXY='https://wsrv.nl/';
   let noticeTimer;
+  let rendererPromise;
 
   function notify(message){
     const notice=$('#notice');
     if(!notice)return;
     notice.textContent=message;
     clearTimeout(noticeTimer);
-    noticeTimer=setTimeout(()=>{notice.textContent=''},7000);
+    noticeTimer=setTimeout(()=>{notice.textContent=''},8000);
   }
 
   function hasContent(){
     const editor=$('#editor .tiptap');
     if(!editor)return false;
     return Boolean(editor.textContent.trim()||editor.querySelector('img,table,hr'));
+  }
+
+  function timeoutSignal(ms){
+    if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')return AbortSignal.timeout(ms);
+    if(typeof AbortController==='undefined')return null;
+    const controller=new AbortController();
+    setTimeout(()=>controller.abort(),ms);
+    return controller.signal;
+  }
+
+  function toDataUrl(blob){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(reader.error||new Error('No se pudo leer un recurso de la carta.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function fetchBlob(url){
+    const response=await fetch(url,{mode:'cors',credentials:'omit',cache:'force-cache',signal:timeoutSignal(18000)||undefined});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const blob=await response.blob();
+    if(!blob.type.startsWith('image/'))throw new Error('El recurso recibido no es una imagen.');
+    return blob;
+  }
+
+  function proxyUrl(url){
+    return `${IMAGE_PROXY}?url=${encodeURIComponent(url)}&output=png`;
+  }
+
+  async function fetchAsDataUrl(url){
+    if(!url||/^data:/i.test(url))return url;
+    if(/^blob:/i.test(url))return toDataUrl(await fetchBlob(url));
+
+    const absolute=new URL(url,document.baseURI).href;
+    try{
+      return toDataUrl(await fetchBlob(absolute));
+    }catch(directError){
+      if(!/^https?:/i.test(absolute))throw directError;
+      try{
+        return toDataUrl(await fetchBlob(proxyUrl(absolute)));
+      }catch(proxyError){
+        const error=new Error('No se pudo preparar una imagen externa para la descarga. Prueba otra URL o una imagen alojada en un servicio público.');
+        error.cause=proxyError;
+        throw error;
+      }
+    }
+  }
+
+  async function embedImages(root){
+    const images=[...root.querySelectorAll('img')];
+    for(const image of images){
+      const source=image.currentSrc||image.getAttribute('src')||image.src;
+      if(!source)continue;
+      const dataUrl=await fetchAsDataUrl(source);
+      image.removeAttribute('srcset');
+      image.removeAttribute('sizes');
+      image.removeAttribute('crossorigin');
+      image.src=dataUrl;
+    }
+  }
+
+  function extractCssUrls(value){
+    const results=[];
+    const pattern=/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/gi;
+    let match;
+    while((match=pattern.exec(value)))results.push({full:match[0],source:(match[1]??match[2]??match[3]??'').trim()});
+    return results;
+  }
+
+  async function embedStyleUrls(root){
+    const elements=[root,...root.querySelectorAll('*')];
+    const properties=['background-image','border-image-source','list-style-image','mask-image','-webkit-mask-image'];
+    for(const element of elements){
+      for(const property of properties){
+        const value=element.style.getPropertyValue(property);
+        if(!value||!value.includes('url('))continue;
+        let next=value;
+        for(const match of extractCssUrls(value)){
+          const source=match.source;
+          if(!source||/^data:/i.test(source)||source.startsWith('#'))continue;
+          try{
+            const dataUrl=await fetchAsDataUrl(source);
+            next=next.replace(match.full,`url("${dataUrl}")`);
+          }catch(error){
+            if(property==='background-image')throw new Error('No se pudo preparar la imagen de fondo para la descarga. Prueba otra URL de fondo.');
+            next=next.replace(match.full,'none');
+          }
+        }
+        element.style.setProperty(property,next,element.style.getPropertyPriority(property));
+      }
+    }
+  }
+
+  function inlineComputedStyles(root){
+    const elements=[root,...root.querySelectorAll('*')];
+    for(const element of elements){
+      const computed=getComputedStyle(element);
+      for(const property of computed){
+        try{element.style.setProperty(property,computed.getPropertyValue(property),computed.getPropertyPriority(property))}catch{}
+      }
+    }
   }
 
   function cleanupClone(root){
@@ -31,7 +150,7 @@
 
   function waitForImages(root){
     return Promise.all([...root.querySelectorAll('img')].map(image=>{
-      if(image.complete)return Promise.resolve();
+      if(image.complete&&image.naturalWidth)return Promise.resolve();
       if(image.decode)return image.decode().catch(()=>{});
       return new Promise(resolve=>{
         image.addEventListener('load',resolve,{once:true});
@@ -40,173 +159,54 @@
     }));
   }
 
-  function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
-
-  async function waitForVideo(video){
-    if(video.readyState>=2&&video.videoWidth&&video.videoHeight)return;
-    await new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>reject(new Error('No se pudo iniciar la captura de la pestaña.')),6000);
-      const ready=()=>{clearTimeout(timer);resolve()};
-      video.addEventListener('loadeddata',ready,{once:true});
-      video.addEventListener('error',()=>{clearTimeout(timer);reject(new Error('No se pudo leer la captura de la pestaña.'))},{once:true});
+  function loadScript(source){
+    return new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src=source.src;
+      script.async=true;
+      script.crossOrigin='anonymous';
+      script.integrity=source.integrity;
+      script.referrerPolicy='no-referrer';
+      script.dataset.emletterHtml2canvas='';
+      script.onload=()=>typeof window.html2canvas==='function'?resolve(window.html2canvas):reject(new Error('El exportador no se inició.'));
+      script.onerror=()=>{script.remove();reject(new Error('No se pudo cargar el exportador.'))};
+      document.head.append(script);
     });
   }
 
-  async function waitForFreshFrame(video){
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    if(typeof video.requestVideoFrameCallback==='function'){
-      await Promise.race([
-        new Promise(resolve=>video.requestVideoFrameCallback(()=>resolve())),
-        delay(180)
-      ]);
-    }else{
-      await delay(140);
-    }
-  }
-
-  function makeCaptureStage(sourcePaper){
-    const rootStyle=getComputedStyle(document.documentElement);
-    const paperWidth=Math.max(320,parseFloat(rootStyle.getPropertyValue('--paper-width'))||sourcePaper.getBoundingClientRect().width);
-    const pageSpace=Math.max(0,parseFloat(rootStyle.getPropertyValue('--page-space'))||0);
-
-    const overlay=document.createElement('div');
-    overlay.className='capture-overlay';
-    overlay.setAttribute('aria-hidden','true');
-
-    const stage=document.createElement('div');
-    stage.className='export-stage capture-stage';
-    stage.style.width=`${Math.ceil(paperWidth+pageSpace*2)}px`;
-    stage.style.padding=`${pageSpace}px`;
-
-    const paper=sourcePaper.cloneNode(true);
-    cleanupClone(paper);
-    paper.style.width='100%';
-    paper.style.maxWidth=`${paperWidth}px`;
-    paper.style.marginLeft='auto';
-    paper.style.marginRight='auto';
-    stage.append(paper);
-
-    const marker=document.createElement('div');
-    marker.className='capture-marker';
-    overlay.append(stage,marker);
-    document.body.append(overlay);
-    document.documentElement.classList.add('emletter-capturing');
-    return {overlay,stage,marker};
-  }
-
-  function sampleMatchesMarker(video,viewportWidth,viewportHeight){
-    const canvas=document.createElement('canvas');
-    canvas.width=video.videoWidth;
-    canvas.height=video.videoHeight;
-    const context=canvas.getContext('2d',{willReadFrequently:true});
-    if(!context)return false;
-    context.drawImage(video,0,0);
-    const scaleX=video.videoWidth/viewportWidth;
-    const scaleY=video.videoHeight/viewportHeight;
-    const x=Math.max(0,Math.min(video.videoWidth-1,Math.round(14*scaleX)));
-    const y=Math.max(0,Math.min(video.videoHeight-1,Math.round(14*scaleY)));
-    const pixel=context.getImageData(x,y,1,1).data;
-    return pixel[0]<45&&pixel[1]>205&&pixel[2]>90&&pixel[2]<180;
-  }
-
-  async function startTabCapture(){
-    if(!navigator.mediaDevices?.getDisplayMedia){
-      throw new Error('Tu navegador no permite capturar la vista previa de forma segura. Prueba con una versión reciente de Chrome o Edge.');
-    }
-    notify('En el selector del navegador, elige “Esta pestaña” para descargar exactamente la vista previa.');
-    try{
-      return await navigator.mediaDevices.getDisplayMedia({
-        video:{
-          displaySurface:'browser',
-          width:{ideal:3840,max:7680},
-          height:{ideal:2160,max:4320},
-          frameRate:{ideal:10,max:15}
-        },
-        audio:false,
-        preferCurrentTab:true,
-        selfBrowserSurface:'include',
-        surfaceSwitching:'exclude'
-      });
-    }catch(error){
-      if(error?.name==='NotAllowedError'||error?.name==='AbortError')throw new Error('Captura cancelada. Para descargar, vuelve a intentarlo y selecciona “Esta pestaña”.');
-      throw new Error('El navegador no pudo iniciar la captura de la vista previa.');
-    }
-  }
-
-  function makeVideo(stream){
-    const video=document.createElement('video');
-    video.muted=true;
-    video.playsInline=true;
-    video.srcObject=stream;
-    return video;
-  }
-
-  async function captureStageToCanvas(video,stage,marker){
-    const viewportWidth=window.innerWidth;
-    const viewportHeight=window.innerHeight;
-    if(!viewportWidth||!viewportHeight)throw new Error('No se pudo calcular el área visible del navegador.');
-
-    await waitForFreshFrame(video);
-    if(!sampleMatchesMarker(video,viewportWidth,viewportHeight)){
-      throw new Error('Para evitar problemas de CORS, selecciona “Esta pestaña” en el selector de captura, no otra pestaña, ventana o pantalla.');
-    }
-
-    marker.hidden=true;
-    await waitForFreshFrame(video);
-
-    const targetWidth=Math.ceil(stage.scrollWidth);
-    const targetHeight=Math.ceil(stage.scrollHeight);
-    if(!targetWidth||!targetHeight)throw new Error('No se pudo calcular el tamaño de la carta.');
-
-    const sourceScaleX=video.videoWidth/viewportWidth;
-    const sourceScaleY=video.videoHeight/viewportHeight;
-    const nativeScale=Math.min(sourceScaleX,sourceScaleY,3);
-    const maxSide=15000;
-    const maxPixels=80000000;
-    const safeScale=Math.min(
-      nativeScale,
-      maxSide/Math.max(targetWidth,targetHeight),
-      Math.sqrt(maxPixels/(targetWidth*targetHeight))
-    );
-    if(!Number.isFinite(safeScale)||safeScale<0.35)throw new Error('La carta es demasiado grande para guardarla como una sola imagen en este navegador.');
-
-    const canvas=document.createElement('canvas');
-    canvas.width=Math.max(1,Math.floor(targetWidth*safeScale));
-    canvas.height=Math.max(1,Math.floor(targetHeight*safeScale));
-    const context=canvas.getContext('2d');
-    if(!context)throw new Error('El navegador no pudo preparar la imagen.');
-
-    for(let y=0;y<targetHeight;y+=viewportHeight){
-      for(let x=0;x<targetWidth;x+=viewportWidth){
-        stage.style.transform=`translate(${-x}px,${-y}px)`;
-        await waitForFreshFrame(video);
-
-        const tileWidth=Math.min(viewportWidth,targetWidth-x);
-        const tileHeight=Math.min(viewportHeight,targetHeight-y);
-        const sourceWidth=Math.max(1,Math.floor(tileWidth*sourceScaleX));
-        const sourceHeight=Math.max(1,Math.floor(tileHeight*sourceScaleY));
-        const destX=Math.floor(x*safeScale);
-        const destY=Math.floor(y*safeScale);
-        const destWidth=Math.min(canvas.width-destX,Math.ceil(tileWidth*safeScale));
-        const destHeight=Math.min(canvas.height-destY,Math.ceil(tileHeight*safeScale));
-
-        context.drawImage(
-          video,
-          0,0,sourceWidth,sourceHeight,
-          destX,destY,destWidth,destHeight
-        );
+  function loadRenderer(){
+    if(typeof window.html2canvas==='function')return Promise.resolve(window.html2canvas);
+    if(rendererPromise)return rendererPromise;
+    rendererPromise=(async()=>{
+      let lastError;
+      for(const source of HTML2CANVAS_SOURCES){
+        try{return await loadScript(source)}catch(error){lastError=error}
       }
-    }
-    stage.style.transform='translate(0,0)';
-    return canvas;
+      throw lastError||new Error('No se pudo cargar el exportador de imagen. Revisa tu conexión e inténtalo de nuevo.');
+    })();
+    return rendererPromise;
+  }
+
+  function dataUrlToBlob(dataUrl){
+    const [meta,data]=dataUrl.split(',');
+    const mime=(meta.match(/^data:([^;]+)/)||[])[1]||'image/png';
+    const binary=atob(data);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    return new Blob([bytes],{type:mime});
   }
 
   function canvasToBlob(canvas){
     return new Promise((resolve,reject)=>{
       try{
-        canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('El navegador no pudo crear el PNG.')),'image/png');
+        if(typeof canvas.toBlob==='function'){
+          canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('El navegador no pudo crear el PNG.')),'image/png');
+          return;
+        }
+        resolve(dataUrlToBlob(canvas.toDataURL('image/png')));
       }catch(error){
-        reject(error);
+        if(error?.name==='SecurityError')reject(new Error('Una imagen externa no pudo convertirse de forma segura. Prueba otra URL para esa imagen.'));
+        else reject(error);
       }
     });
   }
@@ -216,25 +216,72 @@
     const sourcePaper=$('#edit-paper');
     if(!sourcePaper)throw new Error('No se encontró la carta para exportar.');
 
-    let stream;
-    let capture;
+    notify('Preparando la carta para descargarla…');
+    const renderer=await loadRenderer();
+    const rootStyle=getComputedStyle(document.documentElement);
+    const paperWidth=Math.max(320,parseFloat(rootStyle.getPropertyValue('--paper-width'))||sourcePaper.getBoundingClientRect().width);
+    const pageSpace=Math.max(0,parseFloat(rootStyle.getPropertyValue('--page-space'))||0);
+
+    const stage=document.createElement('div');
+    stage.className='export-stage';
+    stage.setAttribute('aria-hidden','true');
+    stage.style.position='fixed';
+    stage.style.left='-100000px';
+    stage.style.top='0';
+    stage.style.width=`${Math.ceil(paperWidth+pageSpace*2)}px`;
+    stage.style.padding=`${pageSpace}px`;
+    stage.style.pointerEvents='none';
+    stage.style.zIndex='-1';
+
+    const paper=sourcePaper.cloneNode(true);
+    cleanupClone(paper);
+    paper.style.width='100%';
+    paper.style.maxWidth=`${paperWidth}px`;
+    paper.style.marginLeft='auto';
+    paper.style.marginRight='auto';
+    stage.append(paper);
+    document.body.append(stage);
+
     try{
-      stream=await startTabCapture();
-      const video=makeVideo(stream);
-      await video.play();
-      await waitForVideo(video);
-
-      capture=makeCaptureStage(sourcePaper);
       if(document.fonts?.ready)await document.fonts.ready;
-      await waitForImages(capture.stage);
-      await waitForFreshFrame(video);
+      inlineComputedStyles(stage);
+      await embedImages(stage);
+      await embedStyleUrls(stage);
+      await waitForImages(stage);
 
-      const canvas=await captureStageToCanvas(video,capture.stage,capture.marker);
-      return await canvasToBlob(canvas);
+      const width=Math.ceil(stage.getBoundingClientRect().width||parseFloat(stage.style.width));
+      const height=Math.ceil(stage.scrollHeight);
+      if(!width||!height)throw new Error('No se pudo calcular el tamaño de la carta.');
+
+      const maxSide=15000;
+      const maxPixels=70000000;
+      const preferredScale=Math.min(3,Math.max(2,window.devicePixelRatio||1));
+      const pixelRatio=Math.min(
+        preferredScale,
+        maxSide/Math.max(width,height),
+        Math.sqrt(maxPixels/(width*height))
+      );
+      if(!Number.isFinite(pixelRatio)||pixelRatio<0.55)throw new Error('La carta es demasiado larga para exportarla como una sola imagen en este dispositivo.');
+
+      const canvas=await renderer(stage,{
+        backgroundColor:null,
+        scale:pixelRatio,
+        useCORS:false,
+        allowTaint:false,
+        foreignObjectRendering:false,
+        logging:false,
+        imageTimeout:0,
+        width,
+        height,
+        windowWidth:Math.max(document.documentElement.clientWidth,width),
+        windowHeight:Math.max(document.documentElement.clientHeight,height),
+        scrollX:0,
+        scrollY:0,
+        removeContainer:true
+      });
+      return canvasToBlob(canvas);
     }finally{
-      capture?.overlay.remove();
-      document.documentElement.classList.remove('emletter-capturing');
-      stream?.getTracks().forEach(track=>track.stop());
+      stage.remove();
     }
   }
 
@@ -245,21 +292,22 @@
     const stamp=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
     link.href=url;
     link.download=`emletter-${stamp}.png`;
+    link.rel='noopener';
     document.body.append(link);
     link.click();
     link.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
   }
 
   button.addEventListener('click',async()=>{
     if(button.disabled)return;
     const original=button.innerHTML;
     button.disabled=true;
-    button.textContent='Capturando vista previa…';
+    button.textContent='Preparando imagen…';
     try{
       const blob=await createPng();
       downloadBlob(blob);
-      notify('Carta descargada como PNG desde la vista previa, sin depender de CORS.');
+      notify('Carta descargada como PNG en alta calidad. No se usó la captura de pantalla del navegador.');
     }catch(error){
       console.error('[EmLetter export]',error);
       notify(error?.message||'No se pudo descargar la carta como imagen.');
