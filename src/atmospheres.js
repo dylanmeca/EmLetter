@@ -1,0 +1,12 @@
+import {defaults,palettes,cleanStyle} from './codec.js';
+export const STORAGE_KEY='cartas.atmospheres.v1';
+const names={velvet:'Tinta',nocturne:'Bruma',relic:'Ceniza'};
+export function original(id){if(!Object.hasOwn(names,id))return null;const [paperBg,textColor]=palettes[id];return {id,name:names[id],style:cleanStyle({...defaults,theme:id,atmosphereName:names[id],paperBg,textColor,titleColor:textColor})}}
+export function createAtmospheres(storage){let presets=Object.keys(names).map(original),defaultId='velvet',storageAvailable=true;
+ try{const raw=storage.getItem(STORAGE_KEY);if(raw){const data=JSON.parse(raw);if(data?.version===1&&Array.isArray(data.presets)){const ids=new Set();const saved=data.presets.filter(p=>p&&typeof p.id==='string'&&/^(velvet|nocturne|relic|custom-[a-z0-9-]+)$/.test(p.id)&&typeof p.name==='string'&&p.name.trim()&&!ids.has(p.id)&&ids.add(p.id)).map(p=>({id:p.id,name:p.name.trim().slice(0,60),style:cleanStyle({...p.style,atmosphereName:p.name.trim().slice(0,60)})}));presets=[...Object.keys(names).map(id=>saved.find(p=>p.id===id)||original(id)),...saved.filter(p=>!Object.hasOwn(names,p.id))];if(presets.some(p=>p.id===data.defaultId))defaultId=data.defaultId}}}catch{storageAvailable=false}
+ function persist(){try{storage.setItem(STORAGE_KEY,JSON.stringify({version:1,defaultId,presets}));storageAvailable=true;return true}catch{storageAvailable=false;return false}}
+ const api={list:()=>presets.map(p=>({...p,style:{...p.style}})),get:id=>{const p=presets.find(p=>p.id===id);return p?{...p,style:{...p.style}}:null},defaultId:()=>defaultId,available:()=>storageAvailable,
+ save({id,name,style,makeDefault=false}){name=String(name||'').trim().slice(0,60);if(!name)throw Error('Escribe un nombre para tu atmósfera.');if(!id)id='custom-'+crypto.randomUUID();else if(!presets.some(p=>p.id===id))throw Error('No se encontró esa atmósfera.');const p={id,name,style:cleanStyle({...style,atmosphereName:name})};const i=presets.findIndex(x=>x.id===id);if(i>=0)presets[i]=p;else presets.push(p);if(makeDefault)defaultId=id;else if(defaultId===id)defaultId='velvet';const persisted=persist();return {preset:api.get(id),persisted}},
+ resetOrRemove(id){const i=presets.findIndex(p=>p.id===id);if(i<0)throw Error('No se encontró esa atmósfera.');const initial=original(id);if(initial)presets[i]=initial;else presets.splice(i,1);if(!presets.some(p=>p.id===defaultId))defaultId='velvet';return {preset:api.get(initial?id:defaultId),persisted:persist()}},
+ };return api;
+}

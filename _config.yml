@@ -1,0 +1,18 @@
+title: EmLetter
+description: "Editor de cartas."
+lang: es
+url: ""
+baseurl: "" 
+markdown: kramdown
+permalink: pretty
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - package.json
+  - package-lock.json
+  - src
+  - scripts
+  - vendor
+  - emletter.gemspec
