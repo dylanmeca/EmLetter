@@ -1,0 +1,47 @@
+---
+layout: default
+title: Página no encontrada · EmLetter
+permalink: /404.html
+---
+
+<main>
+  <section class="heading" aria-labelledby="error-title">
+    <div>
+      <p class="eyebrow">ERROR · 404</p>
+      <h1 id="error-title">Esta carta <em>no llegó a su destino.</em></h1>
+    </div>
+    <a class="outline" href="{{ '/' | relative_url }}">Volver a EmLetter</a>
+  </section>
+
+  <section class="workspace" style="grid-template-columns:minmax(0, 1fr);max-width:900px;margin-inline:auto;">
+    <article class="editor-shell">
+      <div class="paper-wrap">
+        <div class="paper" style="min-height:420px;display:grid;place-items:center;text-align:center;">
+          <div style="max-width:600px;">
+            <div class="ornament" aria-hidden="true">✦ ─── ✦</div>
+
+            <p class="eyebrow" style="margin-bottom:18px;">PÁGINA PERDIDA</p>
+            <h1 style="margin-bottom:20px;">404</h1>
+
+            <p style="margin:0 auto 28px;max-width:520px;color:var(--muted);line-height:1.8;">
+              El enlace que abriste no existe, fue movido o quizá la carta que buscabas ya no está disponible.
+            </p>
+
+            <a class="primary" href="{{ '/' | relative_url }}" style="display:inline-flex;align-items:center;text-decoration:none;">
+              Escribir una nueva carta <span aria-hidden="true">→</span>
+            </a>
+
+            <div class="end-ornament" aria-hidden="true">✦</div>
+          </div>
+        </div>
+      </div>
+
+      <footer class="editor-footer">
+        <span>EmLetter</span>
+        <span>Las palabras encuentran otro camino.</span>
+      </footer>
+    </article>
+  </section>
+
+  <p class="bottom-note">EMLETTER · CARTAS PARA QUEDARSE</p>
+</main>
