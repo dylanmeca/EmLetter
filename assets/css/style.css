@@ -253,3 +253,48 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
 .export-stage .selectedCell{background:transparent}
 .export-stage .paper td,.export-stage .paper th{border-color:var(--accent)}
 @media(max-width:430px){.share-actions{width:100%;display:grid;grid-template-columns:1fr}.share-actions .primary,.share-actions .outline{width:100%}}
+
+/* Keep the editor and sharing controls alongside the designer while scrolling. */
+@media(min-width:761px){
+  .writing{
+    position:sticky;
+    top:18px;
+    align-self:start;
+    max-height:calc(100dvh - 36px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+    padding-right:4px;
+  }
+}
+
+/* Safe image export: capture the rendered preview from the current browser tab. */
+.emletter-capturing,.emletter-capturing body{overflow:hidden!important}
+.capture-overlay{
+  position:fixed;
+  inset:0;
+  z-index:2147483646;
+  overflow:hidden;
+  background:#000;
+  pointer-events:auto;
+  cursor:wait;
+}
+.capture-stage{
+  position:absolute;
+  left:0;
+  top:0;
+  margin:0;
+  box-sizing:border-box;
+  transform:translate(0,0);
+  transform-origin:top left;
+}
+.capture-stage .paper{min-height:0}
+.capture-marker{
+  position:fixed;
+  left:0;
+  top:0;
+  width:28px;
+  height:28px;
+  z-index:2147483647;
+  background:rgb(0,255,127);
+}
