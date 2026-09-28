@@ -207,17 +207,12 @@
     return parts;
   }
 
-  function removeInsetShadows(value){
-    return splitShadowList(value).filter(part=>!/^inset/i.test(part)).join(', ');
-  }
-
-  function neutralizeNeonInset(root){
+  function makeNeonFrameExportSafe(root){
     const paper=root.querySelector('.paper');
     if(!paper)return;
-    const boxShadow=paper.style.getPropertyValue('box-shadow');
-    if(!boxShadow||!(/inset/i.test(boxShadow)))return;
-    const outerShadow=removeInsetShadows(boxShadow);
-    if(outerShadow)paper.style.setProperty('box-shadow',outerShadow,paper.style.getPropertyPriority('box-shadow'));
+    const shadows=splitShadowList(paper.style.getPropertyValue('box-shadow'));
+    const safeShadows=shadows.filter(part=>!part.toLowerCase().includes('inset'));
+    if(safeShadows.length)paper.style.setProperty('box-shadow',safeShadows.join(', '),paper.style.getPropertyPriority('box-shadow'));
     else paper.style.removeProperty('box-shadow');
   }
 
@@ -329,7 +324,7 @@
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
-      if(document.body.dataset.frameMode==='neon')neutralizeNeonInset(stage);
+      if(document.body.dataset.frameMode==='neon')makeNeonFrameExportSafe(stage);
       normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
       await embedStyleUrls(stage);
