@@ -307,13 +307,13 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
   color:var(--ornament-line-color);
   text-shadow:0 0 var(--ornament-glow) var(--ornament-line-color);
 }
-body[data-ornament-line="double"] .ornament-line{border-top-style:double;border-top-width:max(3px,var(--ornament-line-thickness))}
-body[data-ornament-line="dashed"] .ornament-line{border-top-style:dashed}
-body[data-ornament-line="dotted"] .ornament-line{border-top-style:dotted}
-body[data-ornament-line="crosses"] .ornament-line,
-body[data-ornament-line="diamonds"] .ornament-line,
-body[data-ornament-line="stars"] .ornament-line,
-body[data-ornament-line="thorns"] .ornament-line{
+body[data-ornament-line-style="double"] .ornament-line{border-top-style:double;border-top-width:max(3px,var(--ornament-line-thickness))}
+body[data-ornament-line-style="dashed"] .ornament-line{border-top-style:dashed}
+body[data-ornament-line-style="dotted"] .ornament-line{border-top-style:dotted}
+body[data-ornament-line-style="crosses"] .ornament-line,
+body[data-ornament-line-style="diamonds"] .ornament-line,
+body[data-ornament-line-style="stars"] .ornament-line,
+body[data-ornament-line-style="thorns"] .ornament-line{
   width:auto;
   max-width:42%;
   height:auto;
@@ -326,7 +326,7 @@ body[data-ornament-line="thorns"] .ornament-line{
   line-height:1.25;
   letter-spacing:.14em;
 }
-body[data-ornament-line="none"] .ornament-line{display:none}
+body[data-ornament-line-style="none"] .ornament-line{display:none}
 .end-ornament{
   color:var(--ornament-color);
   margin:26px 0 0;
@@ -351,8 +351,8 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 @media(max-width:430px){
   .ornament.ornament-top{gap:8px}
   .ornament-line{max-width:34%}
-  body[data-ornament-line="crosses"] .ornament-line,
-  body[data-ornament-line="diamonds"] .ornament-line,
-  body[data-ornament-line="stars"] .ornament-line,
-  body[data-ornament-line="thorns"] .ornament-line{max-width:35%}
+  body[data-ornament-line-style="crosses"] .ornament-line,
+  body[data-ornament-line-style="diamonds"] .ornament-line,
+  body[data-ornament-line-style="stars"] .ornament-line,
+  body[data-ornament-line-style="thorns"] .ornament-line{max-width:35%}
 }
