@@ -364,6 +364,9 @@
     paperClone.style.width='100%';
     paperClone.style.maxWidth='100%';
     paperClone.style.margin='0';
+    paperClone.style.minHeight='0';
+    paperClone.style.height='auto';
+    paperClone.style.maxHeight='none';
     paper.append(paperClone);
     stage.append(paper);
     document.body.append(stage);
