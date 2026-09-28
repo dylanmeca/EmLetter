@@ -267,3 +267,92 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
     padding-right:4px;
   }
 }
+
+/* Advanced gothic ornaments and frame designer. */
+:root{
+  --frame-color:#526384;
+  --frame-glow-color:#7c3cff;
+  --frame-glow-size:18px;
+  --frame-emoji-size:18px;
+  --frame-emoji-gap:6px;
+  --ornament-color:#a8bce8;
+  --ornament-line-color:#a8bce8;
+  --ornament-glow:0px;
+  --ornament-size:14px;
+  --ornament-line-width:56px;
+  --ornament-line-thickness:1px;
+}
+.paper,#read-paper{position:relative;overflow:visible}
+.ornament.ornament-top{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
+  margin:4px 0 26px;
+  color:var(--ornament-color);
+  font-size:var(--ornament-size);
+  letter-spacing:0;
+  text-shadow:0 0 var(--ornament-glow) var(--ornament-color);
+}
+.ornament-symbol{display:inline-flex;align-items:center;justify-content:center;min-width:1.25em;line-height:1}
+.ornament-line{
+  display:inline-block;
+  flex:0 1 var(--ornament-line-width);
+  width:var(--ornament-line-width);
+  max-width:38%;
+  height:0;
+  overflow:hidden;
+  border-top:var(--ornament-line-thickness) solid var(--ornament-line-color);
+  box-shadow:0 0 var(--ornament-glow) var(--ornament-line-color);
+  color:var(--ornament-line-color);
+  text-shadow:0 0 var(--ornament-glow) var(--ornament-line-color);
+}
+body[data-ornament-line="double"] .ornament-line{border-top-style:double;border-top-width:max(3px,var(--ornament-line-thickness))}
+body[data-ornament-line="dashed"] .ornament-line{border-top-style:dashed}
+body[data-ornament-line="dotted"] .ornament-line{border-top-style:dotted}
+body[data-ornament-line="crosses"] .ornament-line,
+body[data-ornament-line="diamonds"] .ornament-line,
+body[data-ornament-line="stars"] .ornament-line,
+body[data-ornament-line="thorns"] .ornament-line{
+  width:auto;
+  max-width:42%;
+  height:auto;
+  flex:0 1 auto;
+  border:0;
+  box-shadow:none;
+  overflow:hidden;
+  white-space:nowrap;
+  font-size:.68em;
+  line-height:1.25;
+  letter-spacing:.14em;
+}
+body[data-ornament-line="none"] .ornament-line{display:none}
+.end-ornament{
+  color:var(--ornament-color);
+  margin:26px 0 0;
+  font-size:var(--ornament-size);
+  line-height:1;
+  text-shadow:0 0 var(--ornament-glow) var(--ornament-color);
+}
+.emoji-frame{display:none;position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;color:var(--frame-color);text-shadow:0 0 var(--frame-glow-size) var(--frame-glow-color);font-size:var(--frame-emoji-size);line-height:1.15}
+body[data-frame-mode="emoji"] .emoji-frame{display:block}
+.no-border .emoji-frame{display:none!important}
+.frame-side{position:absolute;display:block;overflow:hidden;white-space:nowrap;letter-spacing:var(--frame-emoji-gap);user-select:none}
+.frame-top,.frame-bottom{left:calc(var(--frame-emoji-size) * .35);right:calc(var(--frame-emoji-size) * .35);height:calc(var(--frame-emoji-size) * 1.4);text-align:center}
+.frame-top{top:calc(var(--frame-emoji-size) * -.65)}
+.frame-bottom{bottom:calc(var(--frame-emoji-size) * -.65)}
+.frame-left,.frame-right{top:calc(var(--frame-emoji-size) * .35);bottom:calc(var(--frame-emoji-size) * .35);width:calc(var(--frame-emoji-size) * 1.45);writing-mode:vertical-rl;text-orientation:upright;text-align:center;letter-spacing:var(--frame-emoji-gap)}
+.frame-left{left:calc(var(--frame-emoji-size) * -.72)}
+.frame-right{right:calc(var(--frame-emoji-size) * -.72)}
+.design-subgroup{margin:18px 0;padding:12px 12px 4px;border:1px solid #25314b;border-radius:5px;background:#00061a55}
+.design-subgroup>strong{display:block;color:#cbd9f3;font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+#remove-atmosphere{color:#d8b6ef}
+#remove-line-breaks,#insert-line-break{white-space:nowrap}
+@media(max-width:430px){
+  .ornament.ornament-top{gap:8px}
+  .ornament-line{max-width:34%}
+  body[data-ornament-line="crosses"] .ornament-line,
+  body[data-ornament-line="diamonds"] .ornament-line,
+  body[data-ornament-line="stars"] .ornament-line,
+  body[data-ornament-line="thorns"] .ornament-line{max-width:35%}
+}
