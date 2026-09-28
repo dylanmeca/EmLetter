@@ -802,5 +802,3 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
     .mobile-bottom-nav{background:#050a18fb}
   }
 }
-
-.signature-paint-tools{flex-wrap:wrap;background:#00061a88}.signature-paint-tools select,.signature-paint-tools input{max-width:150px}.signature-input{min-width:120px}.letter-paint{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}.letter-paint.active{pointer-events:auto;cursor:crosshair}.letter-signature[data-signature-style="digital"],.letter-signature[data-signature-style="name"],.letter-signature[data-signature-style="gothic"],.letter-signature[data-signature-style="blood"],.letter-signature[data-signature-style="neon"]{font-family:var(--signature-font);text-shadow:0 0 12px currentColor}.letter-signature[data-signature-style="neon"]{text-shadow:0 0 8px currentColor,0 0 20px currentColor}.letter-signature[data-signature-style="blood"]{filter:saturate(1.4)}
