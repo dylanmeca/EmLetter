@@ -1,7 +1,7 @@
 title: EmLetter
 description: "Editor de cartas."
 lang: es
-url: ""
+url: "https://emletter.vercel.app"
 baseurl: "" 
 markdown: kramdown
 permalink: pretty
