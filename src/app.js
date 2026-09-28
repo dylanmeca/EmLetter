@@ -28,7 +28,7 @@ function editableHTML(d){const body=safeHTML(d.markdown);return d.title?`<h1>${e
 function serializableHTML(){const root=document.createElement('div');root.innerHTML=editor.getHTML();const emptyBlock=node=>['H1','H2','H3','P'].includes(node.tagName)&&!node.textContent.trim()&&!node.querySelector('img,table,hr');while(root.firstElementChild&&emptyBlock(root.firstElementChild))root.firstElementChild.remove();while(root.lastElementChild&&emptyBlock(root.lastElementChild))root.lastElementChild.remove();return root.innerHTML}
 function hasLetterContent(){return Boolean(serializableHTML().trim())}
 function updateUI(){const text=editor.getText().trim();$('#count').textContent=(text?text.split(/\s+/u).length:0)+' palabras';$$('[data-command]').forEach(b=>{const c=b.dataset.command;b.classList.toggle('is-active',editor.isActive(c));b.setAttribute('aria-pressed',String(editor.isActive(c)));if(c==='undo'||c==='redo')b.disabled=!editor.can()[c]()});$('#block').value=editor.isActive('heading')?'h'+editor.getAttributes('heading').level:'p';$('#table-tools').hidden=!editor.isActive('table');const a=editor.getAttributes('textStyle');$('#selection-font').value=(a.fontFamily||'').replace(/["']/g,'');$('#selection-size').value=parseFloat(a.fontSize)||'';$('#text-align').value=editor.getAttributes('paragraph').textAlign||editor.getAttributes('heading').textAlign||'left';}
-function pageBackground(){switch(style.background){case'gradient':return `linear-gradient(135deg,${style.pageBg},${style.pageEnd})`;case'radial':return `radial-gradient(ellipse at 50% 0%,${style.pageEnd},${style.pageBg} 75%)`;case'lines':return `repeating-linear-gradient(135deg,${style.pageBg} 0px,${style.pageBg} 12px,${style.pageEnd} 13px,${style.pageBg} 14px)`;case'image':return style.backgroundImage?`linear-gradient(#0004,#0004),url(${JSON.stringify(style.backgroundImage)})`:'none';default:return'none'}}
+function pageBackground(){switch(style.background){case'gradient':return `linear-gradient(135deg,${style.pageBg},${style.pageEnd})`;case'radial':return `radial-gradient(ellipse at 50% 0%,${style.pageEnd},${style.pageBg} 75%)`;case'lines':return `repeating-linear-gradient(135deg,${style.pageBg} 0px,${style.pageBg} 12px,${style.pageEnd} 13px,${style.pageBg} 14px)`;case'obsidian':return `linear-gradient(135deg,#020107,${style.pageEnd},#00061a)`;case'blood':return `radial-gradient(circle at top,#68162b,${style.pageBg} 65%)`;case'graveyard':return `linear-gradient(180deg,#07120f,${style.pageBg})`;case'image':return style.backgroundImage?`linear-gradient(#0004,#0004),url(${JSON.stringify(style.backgroundImage)})`:'none';default:return'none'}}
 function applyStyle(){
  style=cleanStyle(style);
  const shadows=[];
@@ -40,7 +40,7 @@ function applyStyle(){
  $$('[data-ornament]').forEach(n=>n.textContent=style.ornament);$$('[data-end-ornament]').forEach(n=>n.textContent=style.endOrnament);
  const linePatterns={crosses:'† · † · † · †',diamonds:'◆ ◇ ◆ ◇ ◆',stars:'✦ · ✧ · ✦ · ✧',thorns:'⸸ ─ ⸸ ─ ⸸'};$$('[data-ornament-line]').forEach(n=>n.textContent=linePatterns[style.ornamentLineStyle]||'');
  const framePattern=Array.from({length:48},()=>style.frameEmoji).join(' ');$$('[data-frame-emoji]').forEach(n=>n.textContent=framePattern);
- $$('[data-letter-signature]').forEach(n=>{n.hidden=style.signatureStyle==='none';n.textContent=style.signatureText||'EmLetter';n.dataset.signatureStyle=style.signatureStyle});$('#signature-text-control').hidden=style.signatureStyle==='none';
+ $$('[data-letter-signature]').forEach(n=>{n.hidden=style.signatureStyle==='none';n.textContent=style.signatureText||'EmLetter';n.dataset.signatureStyle=style.signatureStyle;n.dataset.signatureFont=style.signatureFont||'gothicScript'});$('#signature-text-control').hidden=style.signatureStyle==='none';
  $$('[data-style]').forEach(n=>{if(n.type==='checkbox')n.checked=style[n.dataset.style];else n.value=n.dataset.style==='backgroundImage'?unproxyImageUrl(style[n.dataset.style]):style[n.dataset.style]});
  $$('[data-output]').forEach(n=>{const input=$(`[data-style="${n.dataset.output}"]`);n.textContent=style[n.dataset.output]+' '+input.dataset.suffix});refreshAtmospheres();
 }
@@ -96,5 +96,31 @@ $('#preview').onclick=()=>{if(!hasLetterContent()){notify('Escribe unas palabras
 $('#back-edit').onclick=()=>{if(reading&&!reading.preview){editor.commands.setContent(editableHTML(reading.data));history.replaceState(null,'',location.pathname+location.search)}reading=null;$('#reader').hidden=true;$('#composer').hidden=false;document.body.classList.remove('reading');invalidate();editor.commands.focus()};
 function generate(){let d;try{d=data();if(!d.markdown.trim()){notify('Escribe algo antes de compartir tu carta.');return null}const url=new URL(location.href);url.search='';url.hash=encode(d);$('#share-url').value=url.href;$('#open-letter').href=url.href;$('#share-result').hidden=false;$('#link-length').textContent=url.href.length.toLocaleString('es')+' caracteres en el enlace';if(url.href.length>12000)notify('El enlace es largo. Algunas aplicaciones pueden recortarlo: comprueba que se envíe completo.');return url.href}catch(e){notify(e.message);return null}}
 $('#generate').onclick=()=>{if(generate())$('#share-result').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'nearest'})};$('#copy').onclick=async()=>{try{await navigator.clipboard.writeText($('#share-url').value);notify('Enlace copiado con todo el diseño de tu carta.')}catch{$('#share-url').focus();$('#share-url').select();notify('Seleccionamos el enlace. Cópialo con el menú de tu dispositivo.')}};
+
+// Movimiento libre de imágenes con doble click
+function enableFloatingImages(){
+ const paper=document.querySelector('#edit-paper'); if(!paper)return;
+ paper.addEventListener('dblclick',e=>{
+  const img=e.target.closest('img'); if(!img)return;
+  img.classList.toggle('floating-edit');
+  if(img.classList.contains('floating-edit')){img.style.position='absolute';img.style.zIndex=20;img.style.cursor='move';}
+ });
+ let drag=null;
+ paper.addEventListener('pointerdown',e=>{const img=e.target.closest('img.floating-edit');if(!img)return;drag={img,x:e.clientX-img.offsetLeft,y:e.clientY-img.offsetTop};img.setPointerCapture(e.pointerId)});
+ paper.addEventListener('pointermove',e=>{if(!drag)return;drag.img.style.left=(e.clientX-drag.x)+'px';drag.img.style.top=(e.clientY-drag.y)+'px'});
+ paper.addEventListener('pointerup',()=>drag=null);
+}
+function setupPaint(){
+ const c=document.querySelector('#letter-paint'); if(!c)return; const ctx=c.getContext('2d'); let active=false,down=false;
+ const resize=()=>{const r=c.getBoundingClientRect();const d=devicePixelRatio||1;c.width=r.width*d;c.height=r.height*d;ctx.scale(d,d)}; resize();
+ const color=document.querySelector('#paint-color'),size=document.querySelector('#paint-size'),glow=document.querySelector('#paint-glow'),out=document.querySelector('#paint-size-out'),gout=document.querySelector('#paint-glow-out'),btn=document.querySelector('#toggle-paint');
+ btn.onclick=()=>{active=!active;c.classList.toggle('active',active);btn.textContent=active?'Desactivar pincel':'Activar pincel'};
+ size.oninput=()=>out.textContent=size.value+' px'; glow.oninput=()=>gout.textContent=glow.value+' px';
+ c.onpointerdown=e=>{if(!active)return;down=true;c.setPointerCapture(e.pointerId);ctx.beginPath();draw(e)};
+ c.onpointermove=e=>{if(down)draw(e)}; c.onpointerup=()=>down=false;
+ function draw(e){const r=c.getBoundingClientRect();ctx.lineWidth=Number(size.value);ctx.lineCap='round';ctx.strokeStyle=color.value;ctx.shadowColor=color.value;ctx.shadowBlur=Number(glow.value);ctx.lineTo(e.clientX-r.left,e.clientY-r.top);ctx.stroke();ctx.beginPath();ctx.moveTo(e.clientX-r.left,e.clientY-r.top)}
+}
+enableFloatingImages();setupPaint();
+
 function route(){if(/^#c[12]\./.test(location.hash)){try{renderLetter(decode(location.hash.slice(1)))}catch(e){$('#reader').hidden=true;$('#composer').hidden=false;document.body.classList.remove('reading');notify(e.message)}}else{$('#reader').hidden=true;$('#composer').hidden=false;document.body.classList.remove('reading');applyStyle()}}window.addEventListener('hashchange',route);applyStyle();updateUI();route();
 if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'generate_letter_link',description:'Genera y muestra un enlace para compartir el contenido y diseño actuales de la carta.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false},execute(input){if(!input||Object.keys(input).length)throw Error('No se admiten parámetros.');if(!$('#reader').hidden)throw Error('Abre el editor antes de generar el enlace.');const url=generate();if(!url)throw Error('La carta no se puede compartir.');return {url}}})).catch(()=>{})}catch{}}
