@@ -19,6 +19,8 @@
   const IMAGE_PROXY='https://wsrv.nl/';
   let noticeTimer;
   let rendererPromise;
+  const UNSUPPORTED_COLOR_FUNCTION_RE=/\b(?:color-mix|color|oklch|oklab|lch|lab|device-cmyk)\s*\(/i;
+  let styleProbe;
 
   function notify(message){
     const notice=$('#notice');
@@ -132,7 +134,61 @@
     for(const element of elements){
       const computed=getComputedStyle(element);
       for(const property of computed){
+        if(property.startsWith('--'))continue;
         try{element.style.setProperty(property,computed.getPropertyValue(property),computed.getPropertyPriority(property))}catch{}
+      }
+    }
+  }
+
+  function getStyleProbe(){
+    if(styleProbe?.isConnected)return styleProbe;
+    styleProbe=document.createElement('div');
+    styleProbe.setAttribute('aria-hidden','true');
+    styleProbe.style.position='fixed';
+    styleProbe.style.left='-100000px';
+    styleProbe.style.top='0';
+    styleProbe.style.pointerEvents='none';
+    styleProbe.style.opacity='0';
+    document.body.append(styleProbe);
+    return styleProbe;
+  }
+
+  function resolveCssValue(property,value){
+    if(!value||property.startsWith('--'))return '';
+    const probe=getStyleProbe();
+    probe.style.cssText='';
+    try{
+      probe.style.setProperty(property,value);
+      return getComputedStyle(probe).getPropertyValue(property).trim();
+    }catch{
+      return '';
+    }
+  }
+
+  function normalizeUnsupportedColorFunctions(root){
+    const elements=[root,...root.querySelectorAll('*')];
+    for(const element of elements){
+      const properties=[...element.style];
+      for(const property of properties){
+        if(property.startsWith('--')){
+          element.style.removeProperty(property);
+          continue;
+        }
+        const value=element.style.getPropertyValue(property);
+        if(!value||!UNSUPPORTED_COLOR_FUNCTION_RE.test(value))continue;
+        const priority=element.style.getPropertyPriority(property);
+        const resolved=resolveCssValue(property,value);
+        if(resolved&&!UNSUPPORTED_COLOR_FUNCTION_RE.test(resolved)){
+          element.style.setProperty(property,resolved,priority);
+          continue;
+        }
+        if(property==='background-image'||property==='mask-image'||property==='-webkit-mask-image'){
+          element.style.setProperty(property,'none',priority);
+        }else if(property==='box-shadow'||property==='text-shadow'||property==='filter'||property==='backdrop-filter'){
+          element.style.removeProperty(property);
+        }else if(property==='border'||property==='border-top'||property==='border-right'||property==='border-bottom'||property==='border-left'||property==='outline'||property==='column-rule'){
+          element.style.removeProperty(property);
+        }
       }
     }
   }
@@ -245,6 +301,7 @@
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
+      normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
       await embedStyleUrls(stage);
       await waitForImages(stage);
