@@ -309,14 +309,24 @@
     notify('Preparando la carta para descargarla…');
     const renderer=await loadRenderer();
     const sourceSurface=sourcePaper.closest('.paper-wrap')||sourcePaper.parentElement||document.body;
+    const rootStyle=getComputedStyle(document.documentElement);
     const paperRect=sourcePaper.getBoundingClientRect();
     const surfaceStyle=getComputedStyle(sourceSurface);
     const paperStyle=getComputedStyle(sourcePaper);
-    const paperWidth=Math.max(320,Math.ceil(paperRect.width||parseFloat(paperStyle.width)||parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--paper-width'))||0));
+    const paperWidth=Math.max(320,Math.ceil(paperRect.width||parseFloat(paperStyle.width)||parseFloat(rootStyle.getPropertyValue('--paper-width'))||0));
     const paddingTop=Math.max(0,parseFloat(surfaceStyle.paddingTop)||0);
     const paddingRight=Math.max(0,parseFloat(surfaceStyle.paddingRight)||0);
     const paddingBottom=Math.max(0,parseFloat(surfaceStyle.paddingBottom)||0);
     const paddingLeft=Math.max(0,parseFloat(surfaceStyle.paddingLeft)||0);
+    const glowBleed=Math.max(
+      parseFloat(rootStyle.getPropertyValue('--frame-glow-size'))||0,
+      parseFloat(rootStyle.getPropertyValue('--ornament-glow'))||0,
+      (parseFloat(rootStyle.getPropertyValue('--frame-emoji-size'))||0)*0.9,
+      (parseFloat(rootStyle.getPropertyValue('--ornament-size'))||0)*0.35,
+      parseFloat(getComputedStyle(sourcePaper).borderTopWidth)||0,
+      0
+    );
+    const bleed=Math.max(12,Math.ceil(glowBleed+8));
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -325,8 +335,9 @@
     stage.style.left='-100000px';
     stage.style.top='0';
     stage.style.boxSizing='border-box';
-    stage.style.width=`${Math.ceil(paperWidth+paddingLeft+paddingRight)}px`;
-    stage.style.padding=`${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`;
+    stage.style.overflow='visible';
+    stage.style.width=`${Math.ceil(paperWidth+paddingLeft+paddingRight+bleed*2)}px`;
+    stage.style.padding=`${paddingTop+bleed}px ${paddingRight+bleed}px ${paddingBottom+bleed}px ${paddingLeft+bleed}px`;
     stage.style.pointerEvents='none';
     stage.style.zIndex='-1';
     stage.style.backgroundColor=surfaceStyle.backgroundColor;
@@ -337,12 +348,23 @@
     stage.style.backgroundOrigin=surfaceStyle.backgroundOrigin;
     stage.style.backgroundClip=surfaceStyle.backgroundClip;
 
-    const paper=sourcePaper.cloneNode(true);
-    cleanupClone(paper);
+    const paper=document.createElement('div');
     paper.style.width=`${paperWidth}px`;
     paper.style.maxWidth=`${paperWidth}px`;
     paper.style.marginLeft=paperStyle.marginLeft;
     paper.style.marginRight=paperStyle.marginRight;
+    paper.style.padding='0';
+    paper.style.background='transparent';
+    paper.style.border='0';
+    paper.style.boxShadow='none';
+    paper.style.overflow='visible';
+
+    const paperClone=sourcePaper.cloneNode(true);
+    cleanupClone(paperClone);
+    paperClone.style.width='100%';
+    paperClone.style.maxWidth='100%';
+    paperClone.style.margin='0';
+    paper.append(paperClone);
     stage.append(paper);
     document.body.append(stage);
 
@@ -355,8 +377,9 @@
       await embedStyleUrls(stage);
       await waitForImages(stage);
 
-      const width=Math.ceil(stage.getBoundingClientRect().width||parseFloat(stage.style.width));
-      const height=Math.ceil(stage.scrollHeight);
+      const rect=stage.getBoundingClientRect();
+      const width=Math.ceil(Math.max(rect.width,stage.scrollWidth,parseFloat(stage.style.width)||0));
+      const height=Math.ceil(Math.max(rect.height,stage.scrollHeight,stage.offsetHeight));
       if(!width||!height)throw new Error('No se pudo calcular el tamaño de la carta.');
 
       const maxSide=15000;
