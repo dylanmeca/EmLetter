@@ -71,17 +71,20 @@ $('#remove-atmosphere').onclick=()=>{if(!window.confirm('¿Restaurar Tinta, Brum
 
 const commands={bold:'toggleBold',italic:'toggleItalic',underline:'toggleUnderline',strike:'toggleStrike',bulletList:'toggleBulletList',orderedList:'toggleOrderedList',blockquote:'toggleBlockquote',horizontalRule:'setHorizontalRule',undo:'undo',redo:'redo'};
 $$('[data-command]').forEach(b=>b.onclick=()=>editor.chain().focus()[commands[b.dataset.command]]().run());$('#block').onchange=e=>{e.target.value==='p'?editor.chain().focus().setParagraph().run():editor.chain().focus().setHeading({level:Number(e.target.value[1])}).run()};$('#selection-font').onchange=e=>{if(e.target.value)editor.chain().focus().setFontFamily(e.target.value).run()};$('#selection-size').onchange=e=>{if(e.target.value)editor.chain().focus().setFontSize(e.target.value+'px').run()};$('#text-color').onchange=e=>editor.chain().focus().setColor(e.target.value).run();$('#highlight-color').onchange=e=>editor.chain().focus().setBackgroundColor(e.target.value).run();$('#text-align').onchange=e=>editor.chain().focus().setTextAlign(e.target.value).run();$('#clear-format').onclick=()=>editor.chain().focus().unsetAllMarks().unsetTextAlign().run();
-$('#insert-line-break').onclick=()=>editor.chain().focus().setHardBreak().run();
-function removeSelectedLineBreaks(){
- const {state}=editor,{from,to,empty}=state.selection;if(empty){notify('Selecciona el texto cuyas líneas quieras unir.');return}
- const selectedText=state.doc.textBetween(from,to,'\n','\n');if(!selectedText.includes('\n')){notify('La selección no contiene saltos de línea reales.');return}
- const slice=state.doc.slice(from,to),nodes=[];let pendingSpace=false,seenTextBlock=false;
- const appendInline=node=>{if(pendingSpace&&nodes.length){const prev=nodes[nodes.length-1],prevHasSpace=prev.isText&&/\s$/u.test(prev.text||''),nextHasSpace=node.isText&&/^\s/u.test(node.text||'');if(!prevHasSpace&&!nextHasSpace)nodes.push(state.schema.text(' ',node.marks||[]))}nodes.push(node);pendingSpace=false};
- const walk=node=>{if(node.isTextblock){if(seenTextBlock)pendingSpace=true;seenTextBlock=true;node.content.forEach(child=>{if(child.type.name==='hardBreak')pendingSpace=true;else if(child.isInline)appendInline(child);else walk(child)});return}if(node.type.name==='hardBreak'){pendingSpace=true;return}if(node.isInline){appendInline(node);return}node.content.forEach(walk)};
+function setSelectedLineSpacing(breakCount){
+ const {state}=editor,{from,to,empty}=state.selection;if(empty){notify('Selecciona al menos dos líneas para cambiar su separación.');return}
+ const selectedText=state.doc.textBetween(from,to,'\n','\n');if(!selectedText.includes('\n')){notify('La selección debe contener al menos un salto de línea.');return}
+ const slice=state.doc.slice(from,to),nodes=[];let pendingBreak=false,seenTextBlock=false;
+ const addBreaks=()=>{if(!pendingBreak||!nodes.length)return;for(let i=0;i<breakCount;i++)nodes.push(state.schema.nodes.hardBreak.create());pendingBreak=false};
+ const appendInline=node=>{addBreaks();nodes.push(node)};
+ const walk=node=>{if(node.isTextblock){if(seenTextBlock)pendingBreak=true;seenTextBlock=true;node.content.forEach(child=>{if(child.type.name==='hardBreak')pendingBreak=true;else if(child.isInline)appendInline(child);else walk(child)});return}if(node.type.name==='hardBreak'){pendingBreak=true;return}if(node.isInline){appendInline(node);return}node.content.forEach(walk)};
  slice.content.forEach(walk);
- try{const tr=state.tr.replaceWith(from,to,Fragment.fromArray(nodes)).scrollIntoView();editor.view.dispatch(tr);editor.view.focus();notify('Saltos de línea eliminados en la selección.')}catch{editor.chain().focus().insertContentAt({from,to},selectedText.replace(/\s*\n+\s*/gu,' ')).run();notify('Saltos eliminados. El formato interno de esa selección se simplificó para poder unirla.')}
+ try{const tr=state.tr.replaceWith(from,to,Fragment.fromArray(nodes)).scrollIntoView();editor.view.dispatch(tr);editor.view.focus();notify(breakCount===2?'Líneas separadas con una línea vacía.':'Líneas unidas sin espacio extra.')}catch{
+  const separator=breakCount===2?'\n\n':'\n';editor.chain().focus().insertContentAt({from,to},selectedText.split(/\n+/u).map(s=>s.trim()).filter(Boolean).join(separator)).run();notify(breakCount===2?'Líneas separadas.':'Líneas unidas sin espacio extra.');
+ }
 }
-$('#remove-line-breaks').onclick=removeSelectedLineBreaks;
+$('#insert-line-break').onclick=()=>setSelectedLineSpacing(2);
+$('#remove-line-breaks').onclick=()=>setSelectedLineSpacing(1);
 $('#add-table').onclick=()=>editor.chain().focus().insertTable({rows:3,cols:3,withHeaderRow:true}).run();$$('[data-table]').forEach(b=>b.onclick=()=>editor.chain().focus()[b.dataset.table]().run());
 function moveBlock(direction){const {state}=editor,index=state.selection.$from.index(0),nodes=[];state.doc.forEach(n=>nodes.push(n));const next=index+direction;if(next<0||next>=nodes.length){notify(direction<0?'Este bloque ya está al principio.':'Este bloque ya está al final.');return}[nodes[index],nodes[next]]=[nodes[next],nodes[index]];let pos=0;for(let i=0;i<next;i++)pos+=nodes[i].nodeSize;const tr=state.tr.replaceWith(0,state.doc.content.size,Fragment.fromArray(nodes));tr.setSelection(nodes[next].type.name==='image'?NodeSelection.create(tr.doc,pos):TextSelection.near(tr.doc.resolve(Math.min(pos+1,tr.doc.content.size))));editor.view.dispatch(closeHistory(tr));editor.view.focus()}
 $('#move-up').onclick=()=>moveBlock(-1);$('#move-down').onclick=()=>moveBlock(1);
