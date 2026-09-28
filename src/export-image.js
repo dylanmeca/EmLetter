@@ -274,9 +274,15 @@
 
     notify('Preparando la carta para descargarla…');
     const renderer=await loadRenderer();
-    const rootStyle=getComputedStyle(document.documentElement);
-    const paperWidth=Math.max(320,parseFloat(rootStyle.getPropertyValue('--paper-width'))||sourcePaper.getBoundingClientRect().width);
-    const pageSpace=Math.max(0,parseFloat(rootStyle.getPropertyValue('--page-space'))||0);
+    const sourceSurface=sourcePaper.closest('.paper-wrap')||sourcePaper.parentElement||document.body;
+    const paperRect=sourcePaper.getBoundingClientRect();
+    const surfaceStyle=getComputedStyle(sourceSurface);
+    const paperStyle=getComputedStyle(sourcePaper);
+    const paperWidth=Math.max(320,Math.ceil(paperRect.width||parseFloat(paperStyle.width)||parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--paper-width'))||0));
+    const paddingTop=Math.max(0,parseFloat(surfaceStyle.paddingTop)||0);
+    const paddingRight=Math.max(0,parseFloat(surfaceStyle.paddingRight)||0);
+    const paddingBottom=Math.max(0,parseFloat(surfaceStyle.paddingBottom)||0);
+    const paddingLeft=Math.max(0,parseFloat(surfaceStyle.paddingLeft)||0);
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -284,17 +290,25 @@
     stage.style.position='fixed';
     stage.style.left='-100000px';
     stage.style.top='0';
-    stage.style.width=`${Math.ceil(paperWidth+pageSpace*2)}px`;
-    stage.style.padding=`${pageSpace}px`;
+    stage.style.boxSizing='border-box';
+    stage.style.width=`${Math.ceil(paperWidth+paddingLeft+paddingRight)}px`;
+    stage.style.padding=`${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`;
     stage.style.pointerEvents='none';
     stage.style.zIndex='-1';
+    stage.style.backgroundColor=surfaceStyle.backgroundColor;
+    stage.style.backgroundImage=surfaceStyle.backgroundImage;
+    stage.style.backgroundSize=surfaceStyle.backgroundSize;
+    stage.style.backgroundPosition=surfaceStyle.backgroundPosition;
+    stage.style.backgroundRepeat=surfaceStyle.backgroundRepeat;
+    stage.style.backgroundOrigin=surfaceStyle.backgroundOrigin;
+    stage.style.backgroundClip=surfaceStyle.backgroundClip;
 
     const paper=sourcePaper.cloneNode(true);
     cleanupClone(paper);
-    paper.style.width='100%';
+    paper.style.width=`${paperWidth}px`;
     paper.style.maxWidth=`${paperWidth}px`;
-    paper.style.marginLeft='auto';
-    paper.style.marginRight='auto';
+    paper.style.marginLeft=paperStyle.marginLeft;
+    paper.style.marginRight=paperStyle.marginRight;
     stage.append(paper);
     document.body.append(stage);
 
