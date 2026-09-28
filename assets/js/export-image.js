@@ -193,6 +193,34 @@
     }
   }
 
+  function splitShadowList(value){
+    const parts=[];
+    let current='';
+    let depth=0;
+    for(const char of String(value||'')){
+      if(char==='(')depth++;
+      if(char===')')depth=Math.max(0,depth-1);
+      if(char===','&&depth===0){parts.push(current.trim());current='';continue}
+      current+=char;
+    }
+    if(current.trim())parts.push(current.trim());
+    return parts;
+  }
+
+  function removeInsetShadows(value){
+    return splitShadowList(value).filter(part=>!/^inset/i.test(part)).join(', ');
+  }
+
+  function neutralizeNeonInset(root){
+    const paper=root.querySelector('.paper');
+    if(!paper)return;
+    const boxShadow=paper.style.getPropertyValue('box-shadow');
+    if(!boxShadow||!(/inset/i.test(boxShadow)))return;
+    const outerShadow=removeInsetShadows(boxShadow);
+    if(outerShadow)paper.style.setProperty('box-shadow',outerShadow,paper.style.getPropertyPriority('box-shadow'));
+    else paper.style.removeProperty('box-shadow');
+  }
+
   function cleanupClone(root){
     root.removeAttribute('id');
     for(const element of root.querySelectorAll('[id]'))element.removeAttribute('id');
@@ -301,6 +329,7 @@
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
+      if(document.body.dataset.frameMode==='neon')neutralizeNeonInset(stage);
       normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
       await embedStyleUrls(stage);
