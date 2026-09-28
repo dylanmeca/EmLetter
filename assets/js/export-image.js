@@ -165,40 +165,6 @@
     }
   }
 
-  function splitCssList(value){
-    const parts=[];
-    let current='',depth=0,quote='';
-    for(let i=0;i<value.length;i++){
-      const char=value[i];
-      if(quote){
-        current+=char;
-        if(char===quote&&value[i-1]!=='\\')quote='';
-        continue;
-      }
-      if(char==='"'||char==="'"){quote=char;current+=char;continue}
-      if(char==='('){depth++;current+=char;continue}
-      if(char===')'){depth=Math.max(0,depth-1);current+=char;continue}
-      if(char===','&&depth===0){if(current.trim())parts.push(current.trim());current='';continue}
-      current+=char;
-    }
-    if(current.trim())parts.push(current.trim());
-    return parts;
-  }
-
-  function normalizeRendererShadows(root){
-    const elements=[root,...root.querySelectorAll('*')];
-    for(const element of elements){
-      const shadow=element.style.getPropertyValue('box-shadow');
-      if(!shadow||!/\binset\b/i.test(shadow))continue;
-      const priority=element.style.getPropertyPriority('box-shadow');
-      const safe=splitCssList(shadow).filter(part=>!/\binset\b/i.test(part));
-      // html2canvas 1.4.1 can incorrectly paint an inset neon shadow across
-      // the whole element. Keep outer shadows and let the real border carry
-      // the inner edge so the exported paper retains its actual background.
-      element.style.setProperty('box-shadow',safe.length?safe.join(', '):'none',priority);
-    }
-  }
-
   function normalizeUnsupportedColorFunctions(root){
     const elements=[root,...root.querySelectorAll('*')];
     for(const element of elements){
@@ -308,25 +274,9 @@
 
     notify('Preparando la carta para descargarla…');
     const renderer=await loadRenderer();
-    const sourceSurface=sourcePaper.closest('.paper-wrap')||sourcePaper.parentElement||document.body;
     const rootStyle=getComputedStyle(document.documentElement);
-    const paperRect=sourcePaper.getBoundingClientRect();
-    const surfaceStyle=getComputedStyle(sourceSurface);
-    const paperStyle=getComputedStyle(sourcePaper);
-    const paperWidth=Math.max(320,Math.ceil(paperRect.width||parseFloat(paperStyle.width)||parseFloat(rootStyle.getPropertyValue('--paper-width'))||0));
-    const paddingTop=Math.max(0,parseFloat(surfaceStyle.paddingTop)||0);
-    const paddingRight=Math.max(0,parseFloat(surfaceStyle.paddingRight)||0);
-    const paddingBottom=Math.max(0,parseFloat(surfaceStyle.paddingBottom)||0);
-    const paddingLeft=Math.max(0,parseFloat(surfaceStyle.paddingLeft)||0);
-    const glowBleed=Math.max(
-      parseFloat(rootStyle.getPropertyValue('--frame-glow-size'))||0,
-      parseFloat(rootStyle.getPropertyValue('--ornament-glow'))||0,
-      (parseFloat(rootStyle.getPropertyValue('--frame-emoji-size'))||0)*0.9,
-      (parseFloat(rootStyle.getPropertyValue('--ornament-size'))||0)*0.35,
-      parseFloat(getComputedStyle(sourcePaper).borderTopWidth)||0,
-      0
-    );
-    const bleed=Math.max(12,Math.ceil(glowBleed+8));
+    const paperWidth=Math.max(320,parseFloat(rootStyle.getPropertyValue('--paper-width'))||sourcePaper.getBoundingClientRect().width);
+    const pageSpace=Math.max(0,parseFloat(rootStyle.getPropertyValue('--page-space'))||0);
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -334,55 +284,30 @@
     stage.style.position='fixed';
     stage.style.left='-100000px';
     stage.style.top='0';
-    stage.style.boxSizing='border-box';
-    stage.style.overflow='visible';
-    stage.style.width=`${Math.ceil(paperWidth+paddingLeft+paddingRight+bleed*2)}px`;
-    stage.style.padding=`${paddingTop+bleed}px ${paddingRight+bleed}px ${paddingBottom+bleed}px ${paddingLeft+bleed}px`;
+    stage.style.width=`${Math.ceil(paperWidth+pageSpace*2)}px`;
+    stage.style.padding=`${pageSpace}px`;
     stage.style.pointerEvents='none';
     stage.style.zIndex='-1';
-    stage.style.backgroundColor=surfaceStyle.backgroundColor;
-    stage.style.backgroundImage=surfaceStyle.backgroundImage;
-    stage.style.backgroundSize=surfaceStyle.backgroundSize;
-    stage.style.backgroundPosition=surfaceStyle.backgroundPosition;
-    stage.style.backgroundRepeat=surfaceStyle.backgroundRepeat;
-    stage.style.backgroundOrigin=surfaceStyle.backgroundOrigin;
-    stage.style.backgroundClip=surfaceStyle.backgroundClip;
 
-    const paper=document.createElement('div');
-    paper.style.width=`${paperWidth}px`;
+    const paper=sourcePaper.cloneNode(true);
+    cleanupClone(paper);
+    paper.style.width='100%';
     paper.style.maxWidth=`${paperWidth}px`;
-    paper.style.marginLeft=paperStyle.marginLeft;
-    paper.style.marginRight=paperStyle.marginRight;
-    paper.style.padding='0';
-    paper.style.background='transparent';
-    paper.style.border='0';
-    paper.style.boxShadow='none';
-    paper.style.overflow='visible';
-
-    const paperClone=sourcePaper.cloneNode(true);
-    cleanupClone(paperClone);
-    paperClone.style.width='100%';
-    paperClone.style.maxWidth='100%';
-    paperClone.style.margin='0';
-    paperClone.style.minHeight='0';
-    paperClone.style.height='auto';
-    paperClone.style.maxHeight='none';
-    paper.append(paperClone);
+    paper.style.marginLeft='auto';
+    paper.style.marginRight='auto';
     stage.append(paper);
     document.body.append(stage);
 
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
-      normalizeRendererShadows(stage);
       normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
       await embedStyleUrls(stage);
       await waitForImages(stage);
 
-      const rect=stage.getBoundingClientRect();
-      const width=Math.ceil(Math.max(rect.width,stage.scrollWidth,parseFloat(stage.style.width)||0));
-      const height=Math.ceil(Math.max(rect.height,stage.scrollHeight,stage.offsetHeight));
+      const width=Math.ceil(stage.getBoundingClientRect().width||parseFloat(stage.style.width));
+      const height=Math.ceil(stage.scrollHeight);
       if(!width||!height)throw new Error('No se pudo calcular el tamaño de la carta.');
 
       const maxSide=15000;
