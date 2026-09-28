@@ -8,5 +8,6 @@ export function createAtmospheres(storage){let presets=Object.keys(names).map(or
  const api={list:()=>presets.map(p=>({...p,style:{...p.style}})),get:id=>{const p=presets.find(p=>p.id===id);return p?{...p,style:{...p.style}}:null},defaultId:()=>defaultId,available:()=>storageAvailable,
  save({id,name,style,makeDefault=false}){name=String(name||'').trim().slice(0,60);if(!name)throw Error('Escribe un nombre para tu atmósfera.');if(!id)id='custom-'+crypto.randomUUID();else if(!presets.some(p=>p.id===id))throw Error('No se encontró esa atmósfera.');const p={id,name,style:cleanStyle({...style,atmosphereName:name})};const i=presets.findIndex(x=>x.id===id);if(i>=0)presets[i]=p;else presets.push(p);if(makeDefault)defaultId=id;else if(defaultId===id)defaultId='velvet';const persisted=persist();return {preset:api.get(id),persisted}},
  resetOrRemove(id){const i=presets.findIndex(p=>p.id===id);if(i<0)throw Error('No se encontró esa atmósfera.');const initial=original(id);if(initial)presets[i]=initial;else presets.splice(i,1);if(!presets.some(p=>p.id===defaultId))defaultId='velvet';return {preset:api.get(initial?id:defaultId),persisted:persist()}},
+ resetAll(){presets=Object.keys(names).map(original);defaultId='velvet';return {preset:api.get(defaultId),persisted:persist()}},
  };return api;
 }
