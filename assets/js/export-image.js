@@ -165,6 +165,40 @@
     }
   }
 
+  function splitCssList(value){
+    const parts=[];
+    let current='',depth=0,quote='';
+    for(let i=0;i<value.length;i++){
+      const char=value[i];
+      if(quote){
+        current+=char;
+        if(char===quote&&value[i-1]!=='\\')quote='';
+        continue;
+      }
+      if(char==='"'||char==="'"){quote=char;current+=char;continue}
+      if(char==='('){depth++;current+=char;continue}
+      if(char===')'){depth=Math.max(0,depth-1);current+=char;continue}
+      if(char===','&&depth===0){if(current.trim())parts.push(current.trim());current='';continue}
+      current+=char;
+    }
+    if(current.trim())parts.push(current.trim());
+    return parts;
+  }
+
+  function normalizeRendererShadows(root){
+    const elements=[root,...root.querySelectorAll('*')];
+    for(const element of elements){
+      const shadow=element.style.getPropertyValue('box-shadow');
+      if(!shadow||!/\binset\b/i.test(shadow))continue;
+      const priority=element.style.getPropertyPriority('box-shadow');
+      const safe=splitCssList(shadow).filter(part=>!/\binset\b/i.test(part));
+      // html2canvas 1.4.1 can incorrectly paint an inset neon shadow across
+      // the whole element. Keep outer shadows and let the real border carry
+      // the inner edge so the exported paper retains its actual background.
+      element.style.setProperty('box-shadow',safe.length?safe.join(', '):'none',priority);
+    }
+  }
+
   function normalizeUnsupportedColorFunctions(root){
     const elements=[root,...root.querySelectorAll('*')];
     for(const element of elements){
@@ -315,6 +349,7 @@
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
+      normalizeRendererShadows(stage);
       normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
       await embedStyleUrls(stage);
