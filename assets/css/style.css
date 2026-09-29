@@ -83,10 +83,6 @@ legend span{font-size:14px;color:#d5dff2;letter-spacing:0;margin-left:8px}
 .custom-color{position:relative;border:1px dashed #506080;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#c0cdeb;overflow:hidden;cursor:pointer}
 .custom-color input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer}
 .settings select{width:100%;font-size:14px}
-
-.hex-color-control{display:flex;align-items:center;gap:8px}
-.hex-color-control input[type=color]{width:38px;height:34px;padding:0;border:1px solid var(--line);background:transparent;border-radius:6px;cursor:pointer}
-.hex-color-input{width:88px!important;min-width:88px!important;padding:8px!important;font-family:monospace;font-size:13px}
 .range-label{display:flex;justify-content:space-between;font-size:13px;margin:20px 0 9px;color:var(--muted)}
 input[type=range]{width:100%;accent-color:#a8bce8}
 input[type=checkbox]{accent-color:#a8bce8;width:16px;height:16px}
@@ -807,5 +803,10 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
   }
 }
 
-.gothic-color-control{display:flex;align-items:center;gap:.45rem}.gothic-color-button{width:34px;height:34px;border-radius:50%;border:1px solid currentColor;background:conic-gradient(#27103f,#5a1834,#7b241d,#8b6b2b,#173c35,#152b52,#27103f);cursor:pointer}.native-atmosphere-color{position:absolute;opacity:0;pointer-events:none}.hex-color-input{font-family:monospace;text-transform:uppercase;width:88px}
-.gothic-picker{position:absolute;z-index:30;width:230px;height:230px;border-radius:50%;background:conic-gradient(#25113b,#6a1638,#7b2218,#80651f,#174238,#162d5c,#25113b);box-shadow:0 12px 40px #0008;border:1px solid #ffffff22;cursor:crosshair}.gothic-picker::after{content:"";position:absolute;inset:35px;border-radius:50%;background:radial-gradient(circle,#f1e7d055,#000000cc 72%)}
+/* Gothic global color picker */
+.gothic-color{display:flex;align-items:center;gap:8px}
+.gothic-color input[type=color]{width:34px;height:30px;border-radius:50%;cursor:pointer}
+.hex-color{width:78px!important;padding:6px!important;font-family:monospace;background:#080812!important;color:#ddd;border:1px solid #59617a!important}
+.gothic-picker{position:fixed;z-index:9999;width:260px;padding:18px;background:#12101b;border:1px solid #75607f;border-radius:14px;box-shadow:0 12px 40px #000}
+.gothic-wheel{width:210px;height:210px;border-radius:50%;background:conic-gradient(#4b1024,#3d1b65,#122a52,#104b3c,#59420c,#5a1425,#4b1024);cursor:crosshair}
+.gothic-picker input{margin-top:12px;width:100%}
