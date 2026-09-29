@@ -806,3 +806,6 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
     .mobile-bottom-nav{background:#050a18fb}
   }
 }
+
+.gothic-color-control{display:flex;align-items:center;gap:.45rem}.gothic-color-button{width:34px;height:34px;border-radius:50%;border:1px solid currentColor;background:conic-gradient(#27103f,#5a1834,#7b241d,#8b6b2b,#173c35,#152b52,#27103f);cursor:pointer}.native-atmosphere-color{position:absolute;opacity:0;pointer-events:none}.hex-color-input{font-family:monospace;text-transform:uppercase;width:88px}
+.gothic-picker{position:absolute;z-index:30;width:230px;height:230px;border-radius:50%;background:conic-gradient(#25113b,#6a1638,#7b2218,#80651f,#174238,#162d5c,#25113b);box-shadow:0 12px 40px #0008;border:1px solid #ffffff22;cursor:crosshair}.gothic-picker::after{content:"";position:absolute;inset:35px;border-radius:50%;background:radial-gradient(circle,#f1e7d055,#000000cc 72%)}
