@@ -83,6 +83,10 @@ legend span{font-size:14px;color:#d5dff2;letter-spacing:0;margin-left:8px}
 .custom-color{position:relative;border:1px dashed #506080;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#c0cdeb;overflow:hidden;cursor:pointer}
 .custom-color input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer}
 .settings select{width:100%;font-size:14px}
+
+.hex-color-control{display:flex;align-items:center;gap:8px}
+.hex-color-control input[type=color]{width:38px;height:34px;padding:0;border:1px solid var(--line);background:transparent;border-radius:6px;cursor:pointer}
+.hex-color-input{width:88px!important;min-width:88px!important;padding:8px!important;font-family:monospace;font-size:13px}
 .range-label{display:flex;justify-content:space-between;font-size:13px;margin:20px 0 9px;color:var(--muted)}
 input[type=range]{width:100%;accent-color:#a8bce8}
 input[type=checkbox]{accent-color:#a8bce8;width:16px;height:16px}
