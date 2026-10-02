@@ -1,0 +1,6 @@
+---
+layout: null
+permalink: /ads.txt
+sitemap: false
+---
+{% if site.google_adsense.enabled and site.google_adsense.client and site.google_adsense.client != '' %}google.com, {{ site.google_adsense.client | remove_first: 'ca-' }}, DIRECT, f08c47fec0942fa0{% else %}# AdSense desactivado en _config.yml{% endif %}
