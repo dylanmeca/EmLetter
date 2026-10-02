@@ -11,7 +11,6 @@ author:
 markdown: kramdown
 permalink: pretty
 
-# SEO y sitemap
 plugins:
   - jekyll-seo-tag
   - jekyll-sitemap
@@ -21,12 +20,9 @@ webmaster_verifications:
   google: ""
   bing: ""
 
-# Google Analytics 4
-# 1) Cambia enabled a true.
-# 2) Sustituye el ID de ejemplo por tu Measurement ID (formato G-XXXXXXXXXX).
 google_analytics:
-  enabled: false
-  measurement_id: "G-XXXXXXXXXX"
+  enabled: true
+  measurement_id: "G-QGPGVLNF8G"
 
 # Google AdSense
 # 1) Cambia enabled a true.
