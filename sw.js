@@ -1,7 +1,8 @@
 ---
 layout: null
+sitemap: false
 ---
-const VERSION='emletter-pwa-v1';
+const VERSION='emletter-pwa-v3';
 const BASE='{{ site.baseurl | default: "" }}';
 const HOME=`${BASE}/`;
 const CORE=[
