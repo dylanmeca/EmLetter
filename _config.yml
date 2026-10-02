@@ -1,10 +1,45 @@
 title: EmLetter
-description: "Editor de cartas."
+description: "Editor de cartas para escribir, diseñar y compartir mensajes con estilo."
 lang: es
+locale: es_PE
 url: "https://emletter.vercel.app"
-baseurl: "" 
+baseurl: ""
+logo: "/assets/icons/icon-512.png"
+author:
+  name: Dylan Meca
+
 markdown: kramdown
 permalink: pretty
+
+# SEO y sitemap
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Verificación opcional de buscadores. Déjalo vacío si no lo usas.
+webmaster_verifications:
+  google: ""
+  bing: ""
+
+# Google Analytics 4
+# 1) Cambia enabled a true.
+# 2) Sustituye el ID de ejemplo por tu Measurement ID (formato G-XXXXXXXXXX).
+google_analytics:
+  enabled: false
+  measurement_id: "G-XXXXXXXXXX"
+
+# Google AdSense
+# 1) Cambia enabled a true.
+# 2) Indica tu Publisher ID (ca-pub-...).
+# 3) Crea unidades de anuncio adaptables en AdSense y pega sus IDs de slot.
+# Los bloques quedan ocultos automáticamente cuando el slot está vacío.
+google_adsense:
+  enabled: false
+  client: "ca-pub-0000000000000000"
+  slots:
+    editor_top: ""
+    reader_bottom: ""
+
 exclude:
   - README.md
   - Gemfile
