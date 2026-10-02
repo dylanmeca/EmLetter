@@ -15,9 +15,8 @@ plugins:
   - jekyll-seo-tag
   - jekyll-sitemap
 
-# Verificación opcional de buscadores. Déjalo vacío si no lo usas.
 webmaster_verifications:
-  google: ""
+  google: "lBg4RSX2hnEcxA7fWW46cux1hJYk1zvuvF55FjpzZYk"
   bing: ""
 
 google_analytics:
