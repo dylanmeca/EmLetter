@@ -1,0 +1,4 @@
+{% if site.google_adsense.enabled and site.google_adsense.client and site.google_adsense.client != '' %}
+<meta name="google-adsense-account" content="{{ site.google_adsense.client | escape }}">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ site.google_adsense.client | uri_escape }}" crossorigin="anonymous"></script>
+{% endif %}
