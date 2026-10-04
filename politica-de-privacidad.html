@@ -15,37 +15,40 @@ permalink: /politica-de-privacidad/
     <h2>Contenido de tus cartas</h2>
     <p>El diseño y la redacción de las cartas se llevan a cabo en tu navegador. EmLetter no requiere de una cuenta de uso para redactar una carta, además, el proyecto no tiene un sistema propio para guardar el contenido de tus cartas en una base de datos.</p>
     
-    <h2>Enlaces compartidos</h2>
-    <p>Al crear un enlace que puedes compartir, la carta y la configuración visual de esta carta, queda comprimida e incluida toda dentro del propio enlace. Cabe decir que cualquier persona que reciba el enlace, por el hecho de que lo recibe, tiene acceso a esa carta; por lo tanto, debes considerarlo una información que tú decides compartir.</p>
+    <h2>Datos proporcionados</h2>
+    <ul>
+      <li>Cuando generas un enlace que puedes compartir, la carta, la carta se ha comprimido y se encuentra la configuración visual misma de la carta dentro del enlace. Es importante destacar que cualquier persona que reciba el enlace, simplemente por el hecho de que recibe el enlace, tiene acceso a esa carta, por lo que hay que tomarla como una información que tú decides compartir.</li>
+      <li>Las atmósferas o diseños personalizados pueden guardarse utilizando el almacenamiento local del navegador. La implementación de la aplicación o la eliminación de los datos del sitio en el navegador borrarán esos datos en tu dispositivo hasta el momento de borrarlos.</li>
+      <li>Si insertas una imagen mediante una URL, el navegador puede requerirla al sitio que la aloja o a un servicio de procesamiento de imágenes usado por EmLetter. Además, el sitio carga tipografías de Google Fonts. Estos servicios externos pueden obtener datos técnicos habituales en el marco de una conexión web, como por ejemplo la dirección IP o la información del navegador, mediante sus respectivas políticas.</li>
+    </ul>
 
-    <h2>Datos guardados en tu dispositivo</h2>
-    <p>Las atmósferas o diseños personalizados pueden guardarse mediante el almacenamiento local del navegador (<em>localStorage</em>). Esos datos permanecen en tu dispositivo hasta que los elimines desde la aplicación o borres los datos del sitio en tu navegador.</p>
-
-    <h2>Imágenes y servicios externos</h2>
-    <p>Si insertas una imagen mediante una URL, el navegador puede solicitarla al sitio que la aloja o a un servicio de procesamiento de imágenes utilizado por EmLetter. Además, el sitio carga tipografías desde Google Fonts. Estos servicios externos pueden recibir datos técnicos habituales de una conexión web, como la dirección IP o información del navegador, de acuerdo con sus propias políticas.</p>
-
-    <h2>Alojamiento y datos técnicos</h2>
-    <p>El proveedor que aloja EmLetter puede procesar registros técnicos necesarios para servir y proteger el sitio, como direcciones IP, fecha y hora de acceso, agente de usuario o información similar. Ese tratamiento depende de las condiciones y políticas del proveedor de alojamiento.</p>
-
-    <h2>Analítica y medición</h2>
     {% if site.google_analytics.enabled %}
-    <p>EmLetter utiliza Google Analytics para obtener estadísticas sobre el uso del sitio. Este servicio puede tratar identificadores, información del dispositivo, navegación y otros datos técnicos de acuerdo con la configuración aplicada y las políticas de Google.</p>
-    {% else %}
-    <p>Google Analytics está desactivado en la configuración actual del sitio. Si se activa en el futuro, esta página seguirá informando de su uso.</p>
+    <h2>Recopilación de Información</h2>
+    <p>Utilizamos Google Analytics para recopilar información sobre las visitas y el comportamiento de los usuarios en EmLetter. Esta herramienta nos proporciona datos como el tipo de navegador, el sistema operativo, la duración de las visitas y las páginas visitadas. La información recopilada es anónima y se utiliza exclusivamente para mejorar la experiencia de uso.</p>
+    
+    <p><strong>Google Signals.</strong> Hemos activado la recogida de datos mediante Google Signals. Esto permite a Google Analytics recoger información adicional sobre su tráfico y asociarla, cuando proceda, con la información que Google ya tiene de las cuentas de usuarios que han iniciado sesión y han autorizado la asociación para ver anuncios personalizados. La información de Google puede incluir, entre otros datos, la ubicación aproximada de los usuarios, historial de búsquedas, historial de YouTube y datos de sitios asociados con Google. Google Signals no se incluirá en la identidad para los informes de Google Analytics (es decir, no se utiliza para identificar personalmente a los usuarios en los informes de Analytics).</p>
+
+    <h2>Manejo de la Información</h2>
+    <p>Toda la información recopilada será tratada con confidencialidad y protegida adecuadamente. No se compartirá ni se distribuirá la información recopilada sin el consentimiento de los usuarios, salvo que sea requerido por una orden judicial.</p>
+    
+    <p>Si desea evitar que su actividad en línea sea utilizada para anuncios personalizados o asociada mediante servicios como Google Signals, puede:</p>
+    <ul>
+      <li>Gestionar la personalización de anuncios y los permisos desde la página de configuración de anuncios de Google: <a href="https://adssettings.google.com/?hl=es">https://adssettings.google.com/?hl=es</a></li>
+      <li>Consultar y eliminar datos en la página <strong>Mi actividad</strong> de Google: <a href="https://myactivity.google.com/?hl=es">https://myactivity.google.com/?hl=es</a>
+      <li>Desactivar o borrar cookies en su navegador o utilizar herramientas de bloqueo de seguimiento y extensiones de privacidad.</li>
+      <li>Utilizar herramientas o extensiones para bloquear la recopilación de analytics si lo desea.</li>
+    </ul>
+
+    <p>Tenga en cuenta que algunas de estas acciones (por ejemplo, bloquear cookies) pueden afectar la experiencia de usuario.</p>
     {% endif %}
 
-    <h2>Publicidad</h2>
     {% if site.google_adsense.enabled %}
+    <h2>Publicidad</h2>
     <p>EmLetter utiliza Google AdSense para mostrar publicidad. Los anuncios pueden utilizar tecnologías de almacenamiento o medición y pueden adaptarse al dispositivo y al espacio disponible. El tratamiento realizado por Google depende, entre otros factores, de la ubicación del visitante, de la configuración publicitaria y de los consentimientos aplicables.</p>
-    {% else %}
-    <p>Google AdSense está desactivado en la configuración actual del sitio. Si se activa, podrán mostrarse anuncios adaptables tanto en teléfonos como en pantallas de escritorio.</p>
     {% endif %}
 
-    <h2>Cookies, almacenamiento y consentimiento</h2>
-    <p>Algunas funciones propias de EmLetter utilizan almacenamiento local para conservar preferencias. Si se habilitan servicios de analítica o publicidad, esos proveedores pueden utilizar cookies u otras tecnologías de almacenamiento o medición. Cuando la legislación aplicable lo requiera, el responsable del sitio debe implementar el mecanismo de consentimiento adecuado para los visitantes de las regiones afectadas.</p>
-
-    <h2>Responsable y cambios</h2>
-    <p>El responsable de EmLetter es Dylan Meca. Esta política puede actualizarse cuando cambie el funcionamiento del sitio o los servicios externos utilizados. La fecha de la última revisión se mostrará al inicio de esta página.</p>
+    <h2>Actualización</h2>
+    <p>El autor de EmLetter es Dylan Meca. En el caso de ser necesario conforme se modifique la manera de operar del sitio o los distintos servicios externos utilizados, esta política puede ser sometida a actualización. La fecha de la última actualización se informará en la parte superior de esta página.</p>
 
     <a class="outline privacy-back" href="{{ '/' | relative_url }}">← Volver a EmLetter</a>
   </article>
