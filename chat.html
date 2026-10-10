@@ -6,12 +6,7 @@ permalink: /chat.html
 chat_page: true
 ---
 <main class="chat-page" id="contenido">
-  <section class="chat-intro" aria-labelledby="chat-title">
-    <p class="eyebrow">EMLETTER · UN ESPACIO PARA CONVERSAR</p>
-    <h1 id="chat-title">Palabras que nos <em>acercan.</em></h1>
-    <p>Conecta con alguien mediante su ID y deja que la conversación fluya. Sin cuentas, sin complicaciones.</p>
-  </section>
-
+  <h1 class="sr-only">Chat de EmLetter</h1>
   <section class="chat-card" aria-label="Chat privado">
     <header class="chat-toolbar">
       <div class="chat-identity">
@@ -66,7 +61,6 @@ chat_page: true
     </div>
   </section>
 
-  <p class="chat-help">El ID y el historial de mensajes permanecen en esta pestaña durante la sesión. Los archivos se guardan en IndexedDB (pueden permanecer incluso después de cerrar la pestaña) y se transfieren directamente entre dispositivos; el tamaño permitido depende del espacio disponible, la memoria y la red. Para descargar archivos muy grandes sin cargarlos completos en memoria, utiliza Chrome o Edge en HTTPS. Desconectar finaliza el chat para ambas personas, pero conserva el historial. No compartas información sensible: un ID de cinco cifras no funciona como contraseña.</p>
   <footer class="bottom-note"><span>© {{ site.time | date: '%Y' }} Dylan Meca</span><a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a></footer>
 </main>
 <noscript><p class="chat-noscript">Activa JavaScript para utilizar el chat.</p></noscript>
