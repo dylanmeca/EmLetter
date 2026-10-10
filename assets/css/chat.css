@@ -94,3 +94,22 @@
 .chat-connect input[readonly]{opacity:.7;cursor:default}
 .chat-file-link:is(button){font:inherit;text-align:left;cursor:pointer;width:100%;border:0}
 .chat-file-link:disabled{opacity:.64;cursor:progress}
+
+/* Adjuntos sin el marco gris de burbuja; los textos conservan su fondo. */
+.chat-message.is-file .chat-bubble{
+  min-width:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  overflow:visible;
+}
+.chat-message.is-file .chat-file{margin-bottom:0}
+.chat-message.is-file .chat-file-link{padding:4px 0;background:transparent}
+.chat-message.is-file .chat-metadata{margin-top:4px;padding:0 2px}
+/* Los enlaces de los mensajes son accesibles y conservan el contraste. */
+.chat-text .chat-link{color:#a9d5ff;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.chat-message.outgoing .chat-text .chat-link{color:#f1f8ff}
+.chat-text .chat-link:hover{text-decoration-thickness:2px}
+.chat-text .chat-link:focus-visible{outline:2px solid #b9daff;outline-offset:2px;border-radius:2px}
