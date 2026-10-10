@@ -9,7 +9,19 @@
   const clamp=n=>Math.max(-MAX,Math.min(MAX,Math.round(n)));
   const zero=()=>({blocks:[],decor:{},stickers:[]});
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
-  let clipboardItem=null,menuTarget=null,menuPoint=null,contextTimer=null;
+  let clipboardItem=null,menuTarget=null,menuPoint=null,contextTimer=null,emojiSelection=null;
+  let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
+  const isFloating=b=>Boolean(b&&typeof b.s==='string'&&b.s.startsWith('!'));
+  const rawSignature=b=>isFloating(b)?b.s.slice(1):b?.s;
+  const nextSignature=(n,free)=> (free?'!':'')+signature(n);
+  const findBlock=(n,used=new Set(),paper=editingPaper)=>{
+    const i=children(paper).indexOf(n),sig=signature(n);
+    let j=layout.blocks.findIndex((b,k)=>!used.has(k)&&b.i===i&&rawSignature(b)===sig);
+    if(j<0)j=layout.blocks.findIndex((b,k)=>!used.has(k)&&b.i===i);
+    if(j<0)j=layout.blocks.findIndex((b,k)=>!used.has(k)&&rawSignature(b)===sig);
+    if(j>=0)used.add(j);
+    return layout.blocks[j]||null;
+  };
   const decorations={
     ornament:' .ornament-top',
     central:'.ornament-symbol',
@@ -42,6 +54,8 @@
     if(/^(normal|italic|oblique)$/.test(String(value.fontStyle)))style.fontStyle=value.fontStyle;
     if(/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(String(value.color)))style.color=value.color;
     if(/^(left|center|right|justify)$/.test(String(value.textAlign)))style.textAlign=value.textAlign;
+    if(/^#[0-9a-f]{6}$/i.test(String(value.backgroundColor)))style.backgroundColor=value.backgroundColor;
+    if(/^(underline|line-through|none)$/.test(String(value.textDecoration)))style.textDecoration=value.textDecoration;
     return style;
   };
   function computedTextStyle(el){
@@ -55,6 +69,13 @@
     el.style.fontStyle=style?.fontStyle||'';
     el.style.color=style?.color||'';
     el.style.textAlign=style?.textAlign||'';
+    el.style.backgroundColor=style?.backgroundColor||'';
+    el.style.textDecoration=style?.textDecoration||'';
+    const visual=el.querySelector('.emletter-visual-copy');
+    if(visual){for(const prop of ['fontFamily','fontSize','fontWeight','fontStyle','color','textAlign','backgroundColor','textDecoration']){
+      const val=style?.[prop];
+      if(val)visual.style.setProperty(prop.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),prop==='fontSize'?val+'px':val,'important');
+    }}
   }
   function normalize(value){
     const clean=zero();
@@ -82,22 +103,39 @@
   const sheet=document.createElement('style');
   sheet.id='emletter-free-positions';
   document.head.append(sheet);
+  const readerSheet=document.createElement('style');readerSheet.id='emletter-free-reader';document.head.append(readerSheet);
   function paintBlocks(){
     if(!root)return;
-    const nodes=children(editingPaper);
-    const rules=[];
+    const nodes=children(editingPaper),rules=[],used=new Set();
+    let maxBottom=0;
     for(let i=0;i<nodes.length;i++){
-      const n=nodes[i];
-      const found=layout.blocks.find(b=>b.s===signature(n))||layout.blocks.find(b=>b.i===i);
-      const isMoving=active?.kind==='block'&&(active.element===n||active.index===i);
-      const x=isMoving?active.x:(found?.x||0),y=isMoving?active.y:(found?.y||0);
-      if(!x&&!y&&!isMoving)continue;
+      const n=nodes[i],b=findBlock(n,used),moving=active?.kind==='block'&&(active.element===n||active.index===i);
+      const free=isFloating(b)||(moving&&active.free);
+      const x=moving?active.x:(b?.x||0),y=moving?active.y:(b?.y||0);
+      if(!free&&!moving&&!x&&!y)continue;
+      if(free)maxBottom=Math.max(maxBottom,Math.max(0,y)+Math.max(45,n.getBoundingClientRect().height));
       const nth=[...root.children].indexOf(n)+1;
       if(nth<1)continue;
-      const pos=clamp(x)+'px, '+clamp(y)+'px';
-      rules.push(`#edit-paper #editor .tiptap > :nth-child(${nth}){transform:translate(${pos})!important;position:relative;${isMoving?'z-index:9;outline:1px dashed #a6b6e9;outline-offset:6px;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66);':''}}`);
+      const base=free?`position:absolute!important;left:${clamp(x)}px!important;top:${clamp(y)}px!important;transform:none!important;z-index:${moving?12:7};max-width:100%;width:max-content;min-width:min(35px,100%);box-sizing:border-box;margin:0!important;`:
+        `position:relative;transform:translate(${clamp(x)}px,${clamp(y)}px)!important;`;
+      rules.push(`#edit-paper #editor .tiptap > :nth-child(${nth}){${base}${moving?'outline:1px dashed #a6b6e9;outline-offset:5px;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66);':''}}`);
     }
     sheet.textContent=rules.join('\n');
+    root.style.minHeight=maxBottom?Math.min(3000,Math.max(295,maxBottom+32))+'px':'';
+  }
+  function paintReader(){
+    const parent=readingPaper.querySelector('#read-content');if(!parent)return;
+    const nodes=children(readingPaper),used=new Set(),rules=[];
+    let maxBottom=0;
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i],b=findBlock(n,used,readingPaper);
+      if(!isFloating(b))continue;
+      const nth=[...parent.children].indexOf(n)+1;if(nth<1)continue;
+      rules.push(`#read-paper #read-content > :nth-child(${nth}){position:absolute!important;left:${clamp(b.x)}px!important;top:${clamp(b.y)}px!important;transform:none!important;max-width:100%;width:max-content;min-width:35px;margin:0!important;}`);
+      maxBottom=Math.max(maxBottom,Math.max(0,b.y)+Math.max(48,n.getBoundingClientRect().height));
+    }
+    readerSheet.textContent=rules.join('\n');
+    parent.style.minHeight=maxBottom?Math.min(3200,maxBottom+22)+'px':'';
   }
   function transform(n,x,y){
     if(root?.contains(n)){paintBlocks();return}
@@ -106,27 +144,22 @@
     n.classList.toggle('free-placed',Boolean(x||y));
   }
   function blockFor(n,used){
-    let b=layout.blocks.find((item,i)=>!used.has(i)&&item.s===signature(n));
-    let id=b?layout.blocks.indexOf(b):-1;
-    if(!b){const index=children(editingPaper).indexOf(n);id=layout.blocks.findIndex((item,i)=>!used.has(i)&&item.i===index);b=layout.blocks[id]}
-    if(b)used.add(id);
-    return b;
+    return findBlock(n,used);
   }
   function apply(paper){
     if(!paper)return;
     const isEdit=paper.id==='edit-paper';
     const list=children(paper),used=new Set();
     for(let i=0;i<list.length;i++){
-      const n=list[i];
-      let matched=-1;
-      // Por posición y contenido. Tolera la inserción de párrafos nuevos antes de uno movido.
-      if(layout.blocks.some(b=>b.s===signature(n))){matched=layout.blocks.findIndex((b,j)=>!used.has(j)&&b.s===signature(n))}
-      if(matched<0)matched=layout.blocks.findIndex((b,j)=>!used.has(j)&&b.i===i);
-      if(matched>=0){used.add(matched);const b=layout.blocks[matched];transform(n,b.x,b.y);if(isEdit){b.i=i;b.s=signature(n)}}
-      else if(!active||active.element!==n)transform(n,0,0);
+      const n=list[i],b=findBlock(n,used,paper);
+      if(b){
+        if(isEdit){b.i=i;b.s=nextSignature(n,isFloating(b));if(!isFloating(b))transform(n,b.x,b.y)}
+        else if(!isFloating(b))transform(n,b.x,b.y);
+        if(isFloating(b)&&!isEdit)n.style.transform='';
+      }else if(!active||active.element!==n)transform(n,0,0);
     }
     renderStickers(paper);
-    if(isEdit)paintBlocks();
+    if(isEdit)paintBlocks();else paintReader();
     for(const key of dKeys){
       const el=paper.querySelector(decorations[key]);
       if(!el)continue;
@@ -139,6 +172,54 @@
     if(result)result.hidden=true;
     window.dispatchEvent(new CustomEvent('emletter:placement-change'));
   }
+  // Los duplicados visuales viajan en el mismo campo de texto ya validado por
+  // el codec antiguo; nunca se interpretan como HTML de terceros.
+  const VISUAL_PREFIX='\uE000EMLETTER-VISUAL-1:';
+  const visualKeys=new Set(dKeys);
+  const visualCSS=['font-family','font-size','font-weight','font-style','color','text-align','text-shadow','letter-spacing','line-height','border-top-width','border-top-style','border-top-color','box-shadow','gap','width','height','justify-content','align-items','display','white-space','writing-mode','text-orientation'];
+  function getVisual(text){
+    if(typeof text!=='string'||!text.startsWith(VISUAL_PREFIX))return null;
+    try{
+      const visual=JSON.parse(text.slice(VISUAL_PREFIX.length));
+      if(!visualKeys.has(visual.k)||!Array.isArray(visual.nodes)||visual.nodes.length>6)return null;
+      if(visual.nodes.some(n=>!n||typeof n.t!=='string'||n.t.length>500||!Array.isArray(n.c)||n.c.length!==visualCSS.length))return null;
+      return visual;
+    }catch{return null}
+  }
+  function captureVisual(key){
+    const original=editingPaper.querySelector(decorations[key]);
+    if(!original)return null;
+    const nodes=[original,...original.querySelectorAll('*')].slice(0,6);
+    const visual={k:key,nodes:nodes.map(n=>{
+      const computed=getComputedStyle(n);
+      return {t:n.children.length?'':(n.textContent||'').slice(0,500),c:visualCSS.map(property=>computed.getPropertyValue(property).trim().slice(0,125))};
+    })};
+    const encoded=VISUAL_PREFIX+JSON.stringify(visual);
+    return encoded.length<=2000?encoded:null;
+  }
+  function populateVisual(el,visual){
+    const original=editingPaper.querySelector(decorations[visual.k]);
+    if(!original)return;
+    const copy=original.cloneNode(true);
+    const originals=[copy,...copy.querySelectorAll('*')];
+    originals.forEach((n,i)=>{
+      n.removeAttribute('id');n.removeAttribute('data-ornament');n.removeAttribute('data-ornament-line');
+      n.removeAttribute('data-end-ornament');n.removeAttribute('data-letter-signature');n.removeAttribute('data-frame-emoji');
+      n.classList.remove('free-moving','free-placed');
+      n.style.transform='';
+      const snap=visual.nodes[i];if(!snap)return;
+      if(!n.children.length)n.textContent=snap.t;
+      visualCSS.forEach((property,j)=>{
+        const v=snap.c[j];
+        // CSS leido de propiedades computadas, nunca nombres de propiedades arbitrarios.
+        if(v&&v.length<=125&&!/[;{}<>]/.test(v)&&!/(?:url\s*\(|expression\s*\(|@import|javascript:)/i.test(v))n.style.setProperty(property,v);
+      });
+    });
+    copy.classList.add('emletter-visual-copy');
+    el.replaceChildren(copy);
+    el.classList.add('free-visual');
+    el.contentEditable='false';
+  }
   function renderStickers(paper){
     let layer=paper.querySelector(':scope > .free-sticker-layer');
     if(!layer){layer=document.createElement('div');layer.className='free-sticker-layer';paper.append(layer)}
@@ -150,13 +231,20 @@
         el=document.createElement('span');el.className='free-sticker';el.dataset.stickerId=sticker.id;
         el.setAttribute('aria-label','Texto o emoji libre');
         if(edit){
-          el.contentEditable='true';el.setAttribute('spellcheck','true');
+          el.contentEditable=getVisual(sticker.text)?'false':'true';el.setAttribute('spellcheck','true');
           el.addEventListener('input',()=>{sticker.text=el.textContent.slice(0,2000);changed()});
           el.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();el.blur()}});
         }
         layer.append(el);
       }
-      if(document.activeElement!==el)el.textContent=sticker.text;
+      const visual=getVisual(sticker.text);
+      if(visual){
+        if(el.dataset.visualContent!==sticker.text){populateVisual(el,visual);el.dataset.visualContent=sticker.text}
+      }else{
+        el.classList.remove('free-visual');el.contentEditable=edit?'true':'false';
+        delete el.dataset.visualContent;
+        if(document.activeElement!==el)el.textContent=sticker.text;
+      }
       applyTextStyle(el,sticker.style);
       if(!active||el!==active.element)transform(el,sticker.x,sticker.y);
     }
@@ -191,8 +279,10 @@
       if(index<0)index=entries.findIndex(n=>signature(n)===item.sig);
       if(index<0)index=item.index;
       if(index<0||index>=entries.length)return;
+      const prev=findBlock(entries[index]);
+      const free=item.free||isFloating(prev);
       layout.blocks=layout.blocks.filter(entry=>entry.i!==index);
-      if(a||b)layout.blocks.push({i:index,s:signature(entries[index]),x:a,y:b});
+      if(a||b||free)layout.blocks.push({i:index,s:nextSignature(entries[index],free),x:a,y:b});
     }
     changed();
   }
@@ -214,13 +304,30 @@
     if(item.kind==='sticker')return layout.stickers.find(s=>s.id===item.key)||{x:0,y:0};
     if(item.kind==='decor')return layout.decor[item.key]||{x:0,y:0};
     const list=children(editingPaper),i=list.indexOf(item.element),s=signature(item.element);
-    return layout.blocks.find(b=>b.s===s)||layout.blocks.find(b=>b.i===i)||{x:0,y:0};
+    return findBlock(item.element)||{x:0,y:0};
   }
   // Los avisos de movimiento no se muestran en la interfaz.
   function showHint(){}
   function begin(item,ev){
-    const p=positionFor(item);
-    active={...item,index:item.kind==='block'?children(editingPaper).indexOf(item.element):-1,sig:item.kind==='block'?signature(item.element):'',x:p.x,y:p.y,startX:ev.clientX,startY:ev.clientY,originX:p.x,originY:p.y};
+    if(item.kind==='block'&&!root?.contains(item.element))return;
+    let p=positionFor(item),free=item.kind==='block'&&(isFloating(p)||item.convert);
+    // El primer doble clic izquierdo convierte el BLOQUE REAL en posición libre.
+    // Conserva sus marcas de Tiptap y no crea una copia de texto plano.
+    if(item.kind==='block'&&item.convert&&!isFloating(p)){
+      const box=item.element.getBoundingClientRect(),base=root.getBoundingClientRect();
+      // El rectángulo del contenido, no el ancho del párrafo: un título centrado
+      // debe quedarse en el mismo lugar cuando pasa a posición libre.
+      const range=document.createRange();range.selectNodeContents(item.element);
+      const textRect=range.getBoundingClientRect();
+      const rect=textRect.width>1&&textRect.height>1?textRect:box;
+      const i=children(editingPaper).indexOf(item.element);
+      const x=clamp(rect.left-base.left),y=clamp(rect.top-base.top);
+      layout.blocks=layout.blocks.filter(b=>b.i!==i);
+      p={i,s:nextSignature(item.element,true),x,y};layout.blocks.push(p);
+      changed();
+    }
+    selectedFree=item.kind==='block'&&free?{kind:'block',element:item.element}:item.kind==='sticker'?{kind:'sticker',key:item.key}:null;
+    active={...item,free,index:item.kind==='block'?children(editingPaper).indexOf(item.element):-1,sig:item.kind==='block'?signature(item.element):'',x:p.x,y:p.y,startX:ev.clientX,startY:ev.clientY,originX:p.x,originY:p.y};
     document.body.classList.add('placing-element');
     if(item.kind==='block')paintBlocks();else item.element.classList.add('free-moving');
   }
@@ -245,6 +352,19 @@
   function menuAt(target,ev){
     const clientX=ev.clientX??ev.x??8,clientY=ev.clientY??ev.y??8;
     menuTarget=target;menuPoint={x:clientX,y:clientY};
+    const ed=editor();
+    if(ed){
+      const selection=ed.state.selection;
+      // El derecho no debe sustituir la posición del cursor con las coordenadas del menú.
+      emojiSelection={from:selection.from,to:selection.to};
+      const native=getSelection();
+      if(native?.anchorNode&&root?.contains(native.anchorNode)){
+        try{
+          const pos=ed.view.posAtDOM(native.anchorNode,native.anchorOffset);
+          if(Number.isInteger(pos))emojiSelection={from:pos,to:native.isCollapsed?pos:selection.to};
+        }catch{}
+      }
+    }
     contextMenu.querySelector('[data-action="duplicate"]').disabled=!target;
     contextMenu.querySelector('[data-action="copy"]').disabled=!target;
     contextMenu.querySelector('[data-action="paste"]').disabled=!clipboardItem;
@@ -357,9 +477,15 @@
       if(sticker){sticker.text=(sticker.text+glyph).slice(0,2000);renderStickers(editingPaper);changed()}
     }else{
       const ed=editor();if(ed){
-        const at=ed.view.posAtCoords({left:menuPoint?.x||0,top:menuPoint?.y||0});
-        const point=at?.pos??ed.state.selection.from;
-        ed.chain().focus().insertContentAt(point,glyph).run();
+        const max=ed.state.doc.content.size;
+        let from=Math.max(0,Math.min(max,emojiSelection?.from??ed.state.selection.from));
+        let to=Math.max(from,Math.min(max,emojiSelection?.to??from));
+        // Inserta en el texto del cursor; no en el buscador ni en los botones del menú.
+        if(!ed.state.doc.resolve(from).parent.inlineContent){
+          const current=ed.state.selection.$from;
+          from=current.parent.inlineContent?current.pos:Math.max(1,max-1);to=from;
+        }
+        ed.chain().focus().insertContentAt({from,to},glyph).run();
       }
     }
     hideMenu();
@@ -380,26 +506,62 @@
   function clipFrom(item){
     if(!item)return null;
     if(item.kind==='sticker'){
-      const s=layout.stickers.find(s=>s.id===item.key);
-      return s?{type:'sticker',text:s.text,style:s.style||{}}:null;
+      const st=layout.stickers.find(s=>s.id===item.key);
+      return st?{type:'sticker',text:st.text,style:{...st.style},source:positionFor(item)}:null;
     }
-    if(item.kind==='decor')return {type:'sticker',text:item.element.textContent.trim(),style:computedTextStyle(item.element)};
+    if(item.kind==='decor'){
+      const text=captureVisual(item.key);
+      return text?{type:'sticker',text,style:{},source:positionFor(item)}:null;
+    }
     const details=nodeAtElement(item.element);
-    if(details?.node.type.name==='image')return {type:'image',json:details.node.toJSON()};
-    const text=item.element.textContent||'';
-    if(!text||text.length>2000)return null;
-    return {type:'sticker',text,style:computedTextStyle(item.element)};
+    if(!details)return null;
+    return {type:'block',json:details.node.toJSON(),source:positionFor(item),index:children(editingPaper).indexOf(item.element)};
+  }
+  function selectionClip(item,selection){
+    if(item?.kind!=='block'||!selection||selection.isCollapsed||!root?.contains(selection.anchorNode))return null;
+    const ed=editor();if(!ed)return null;
+    const {from,to}=ed.state.selection;
+    if(from===to)return null;
+    // Si la selección contiene el bloque completo, se copia como bloque y
+    // conserva su título, alineación, atributos y todas las marcas.
+    const nodeInfo=nodeAtElement(item.element);
+    if(nodeInfo&&from<=nodeInfo.pos+1&&to>=nodeInfo.pos+1+nodeInfo.node.content.size)return null;
+    const slice=ed.state.doc.slice(from,to);
+    const content=slice.content.toJSON();
+    if(!content?.length)return null;
+    // Una selección en mitad del párrafo conserva sus marcas, colores y tipografías.
+    const isInline=content.every(n=>['text','hardBreak'].includes(n.type));
+    return {type:'block',json:isInline?{type:'paragraph',attrs:{...nodeAtElement(item.element)?.node.attrs},content}:content,source:positionFor(item),index:children(editingPaper).indexOf(item.element)};
   }
   function pasteClip(clip,pt){
-    if(!clip)return;
-    if(clip.type==='image'){
-      const ed=editor();if(!ed)return;
-      ed.chain().focus().insertContent(clip.json).run();
-      showHint('Imagen duplicada en el editor.');return;
+    if(!clip)return false;
+    if(clip.type==='block'){
+      const ed=editor();if(!ed)return false;
+      const doc=ed.state.doc;
+      const json=structuredClone(clip.json);
+      const count=Array.isArray(json)?json.length:1;
+      const before=children(editingPaper);
+      const srcIndex=Math.max(0,Math.min(before.length-1,clip.index??0));
+      // Insertar detrás del original, respetando también el último bloque.
+      const insertIndex=Math.min(srcIndex+1,before.length);
+      let insertPos=0;
+      for(let i=0;i<insertIndex;i++)insertPos+=doc.child(i).nodeSize;
+      if(!ed.commands.insertContentAt(insertPos,json,{updateSelection:false}))return false;
+      for(const block of layout.blocks)if(block.i>=insertIndex)block.i+=count;
+      const nodes=children(editingPaper);
+      const shift=clip.source||{x:0,y:0};
+      for(let i=insertIndex;i<Math.min(nodes.length,insertIndex+count);i++){
+        const n=nodes[i];if(!n||!eligible(n))continue;
+        layout.blocks.push({i,s:nextSignature(n,isFloating(shift)),x:clamp(shift.x+24),y:clamp(shift.y+24)});
+      }
+      apply(editingPaper);changed();return true;
     }
-    const pos=pointOnPaper(pt);
-    const added=addSticker(clip.text,{...pos,style:clip.style,focus:false});
-    if(added)showHint('Copia creada.');
+    if(clip.type==='sticker'){
+      const pos=pointOnPaper(pt);
+      const original=clip.source||{x:0,y:0};
+      return !!addSticker(clip.text,{x:pt?.usePosition?clamp(original.x+24):pos.x,y:pt?.usePosition?clamp(original.y+24):pos.y,style:clip.style,focus:false});
+    }
+    return false;
   }
   contextMenu.addEventListener('click',ev=>{
     const button=ev.target.closest('button[data-action]');if(!button||button.disabled)return;
@@ -407,17 +569,71 @@
     if(action==='emojis'){setEmojiPanel(true);return}
     if(action==='copy'||action==='duplicate'){
       const selection=getSelection();
-      const selected=selection?.toString()||'';
-      // Si el usuario seleccionó una frase, se copia esa frase; de lo contrario, el bloque entero.
-      const selectionInside=selection?.anchorNode&&root?.contains(selection.anchorNode)&&target?.element&&(selection.anchorNode===target.element||target.element.contains(selection.anchorNode));
-      clipboardItem=selected&&selected.length<=2000&&selectionInside?{type:'sticker',text:selected,style:computedTextStyle(target?.element||root)}:clipFrom(target);
-      if(action==='copy'&&clipboardItem?.type==='sticker')navigator.clipboard?.writeText(clipboardItem.text).catch(()=>{});
+      clipboardItem=action==='duplicate'?clipFrom(target):(selectionClip(target,selection)||clipFrom(target));
+      if(action==='copy'&&clipboardItem?.type==='sticker'&&!getVisual(clipboardItem.text))navigator.clipboard?.writeText(clipboardItem.text).catch(()=>{});
     }
     const clip=action==='paste'?clipboardItem:action==='duplicate'?clipboardItem:null;
     hideMenu();
-    if(clip)pasteClip(clip,{x:point.x+24,y:point.y+24});
-    else if(action==='copy')showHint(clipboardItem?'Elemento copiado.':'No se pudo copiar este elemento.');
+    if(clip)pasteClip(clip,{x:point.x+24,y:point.y+24,usePosition:action==='duplicate'});
   });
+  // Al dar formato a un bloque libre sin selección explícita, se aplica al
+  // bloque entero y no al texto que estuviera seleccionado anteriormente.
+  function selectFreeBlockRange(){
+    if(selectedFree?.kind!=='block')return;
+    const ed=editor(),n=selectedFree.element;if(!ed||!n?.isConnected)return;
+    const info=nodeAtElement(n);if(!info||!info.node.isTextblock)return;
+    const {from,to,empty}=ed.state.selection;
+    const start=info.pos+1,end=start+info.node.content.size;
+    if(from>=start&&to<=end&&!empty)return;
+    ed.commands.setTextSelection({from:start,to:end});
+  }
+  document.querySelector('#composer .toolbar')?.addEventListener('pointerdown',event=>{
+    const node=event.target.closest('select,button,input');
+    if(!node||!selectedFree||selectedFree.kind!=='block')return;
+    if(node.matches('[data-command],#selection-font,#selection-size,#text-color,#highlight-color,#text-align,#clear-format,#block'))selectFreeBlockRange();
+  },true);
+  // Las herramientas de formato se aplican al elemento libre seleccionado.
+  // Para los bloques de Tiptap mantenemos la misma edición original y sus marcas.
+  const toolbar=document.querySelector('#composer .toolbar');
+  function selectedSticker(){
+    if(selectedFree?.kind!=='sticker')return null;
+    return layout.stickers.find(st=>st.id===selectedFree.key)||null;
+  }
+  function applyStickerFormat(target){
+    const st=selectedSticker();if(!st||!target)return false;
+    const id=target.id,cmd=target.dataset.command;
+    if(id==='selection-font')st.style.fontFamily=target.value;
+    else if(id==='selection-size')st.style.fontSize=Math.max(8,Math.min(120,Number(target.value)||18));
+    else if(id==='text-color')st.style.color=target.value;
+    else if(id==='text-align')st.style.textAlign=target.value;
+    else if(id==='highlight-color')st.style.backgroundColor=target.value;
+    else if(cmd==='bold')st.style.fontWeight=/^(bold|[6-9]00)$/.test(st.style.fontWeight)?'normal':'bold';
+    else if(cmd==='italic')st.style.fontStyle=st.style.fontStyle==='italic'?'normal':'italic';
+    else if(cmd==='underline')st.style.textDecoration=st.style.textDecoration==='underline'?'none':'underline';
+    else if(cmd==='strike')st.style.textDecoration=st.style.textDecoration==='line-through'?'none':'line-through';
+    else if(id==='clear-format')st.style={};
+    else return false;
+    renderStickers(editingPaper);changed();return true;
+  }
+  if(toolbar){
+    toolbar.addEventListener('click',ev=>{
+      const button=ev.target.closest('button');
+      if(!button||!selectedSticker())return;
+      if(applyStickerFormat(button)){ev.stopImmediatePropagation();ev.preventDefault()}
+    },true);
+    toolbar.addEventListener('change',ev=>{
+      if(!selectedSticker())return;
+      if(applyStickerFormat(ev.target)){ev.stopImmediatePropagation();ev.preventDefault()}
+    },true);
+  }
+  // Cambiar entre un elemento libre y texto normal invalida el objetivo anterior.
+  editingPaper.addEventListener('pointerdown',ev=>{
+    const target=getTarget(ev.target);
+    if(target?.kind==='sticker')selectedFree={kind:'sticker',key:target.key};
+    else if(target?.kind==='block')selectedFree=isFloating(positionFor(target))?{kind:'block',element:target.element}:null;
+    else if(!active)selectedFree=null;
+  });
+  if(toolbar){toolbar.addEventListener('pointerdown',()=>{if(active)finish(true)},true)}
   document.addEventListener('pointerdown',ev=>{if(!contextMenu.hidden&&!contextMenu.contains(ev.target))hideMenu()},true);
   document.addEventListener('scroll',()=>{if(!contextMenu.hidden)hideMenu()},true);
   // La selección nativa no siempre selecciona emoji (en especial ZWJ y modificadores).
@@ -446,11 +662,12 @@
   // marcas, tipografía, colores, enlaces y edición normal (no se duplica).
   // Un emoji dentro de un párrafo sí puede extraerse de manera independiente.
   editingPaper.addEventListener('dblclick',ev=>{
-    if(ev.button!==0||active)return;
+    if(ev.button!==0)return;
+    if(active){ev.preventDefault();finish(true);return}
     const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
     if(!source)return;
     const item=getTarget(source);
-    if(item?.kind==='sticker'){ev.preventDefault();begin(item,ev);return}
+    if(item?.kind==='sticker'||item?.kind==='decor'){ev.preventDefault();begin(item,ev);return}
     const block=source.closest('#editor .tiptap p,#editor .tiptap h1,#editor .tiptap h2,#editor .tiptap h3');
     if(!block||!root?.contains(block))return;
     const ed=editor(),info=nodeAtElement(block);
@@ -471,7 +688,7 @@
       return;
     }
     // El bloque sigue siendo editable con todos sus estilos y fuentes.
-    if(item?.kind==='block'){ev.preventDefault();begin(item,ev)}
+    if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
   editingPaper.addEventListener('contextmenu',event=>{
     const item=getTarget(event.target);
@@ -511,7 +728,7 @@
       if(event.key==='ArrowRight')active.x+=step;
       transform(active.element,active.x,active.y);event.preventDefault();
     }
-  });
+  },true);
   // En móvil, donde no existe botón derecho, pulsación prolongada para seleccionar,
   // arrastre con el dedo y un toque largo para soltar.
   let longTimer=null,touchPoint=null;
