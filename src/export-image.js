@@ -297,9 +297,11 @@
 
     notify('Preparando la carta para descargarla…');
     const renderer=await loadRenderer();
-    const rootStyle=getComputedStyle(document.documentElement);
-    const paperWidth=Math.max(320,parseFloat(rootStyle.getPropertyValue('--paper-width'))||sourcePaper.getBoundingClientRect().width);
-    const pageSpace=Math.max(0,parseFloat(rootStyle.getPropertyValue('--page-space'))||0);
+    // Reproducir el tamaño que realmente ve el usuario: en móvil el ancho
+    // configurado para escritorio no equivale al lienzo visible.
+    const paperWidth=Math.max(1,sourcePaper.getBoundingClientRect().width);
+    const wrapper=getComputedStyle(sourcePaper.parentElement);
+    const pageSpace=Math.max(0,parseFloat(wrapper.paddingLeft)||0);
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -313,17 +315,27 @@
     stage.style.zIndex='-1';
 
     const paper=sourcePaper.cloneNode(true);
-    // La colocación libre de Tiptap se aplica mediante CSS para evitar
-    // que ProseMirror reemplace elementos durante el arrastre. Copiamos
-    // sus transformaciones al clon antes de eliminar los identificadores.
+    // Las posiciones absolutas de los bloques Tiptap se pintan con reglas
+    // CSS ligadas a #edit-paper. Al clonar y limpiar los IDs esas reglas
+    // desaparecen, así que conservamos sus propiedades calculadas en línea.
     const sourceBlocks=[...sourcePaper.querySelectorAll('#editor .tiptap > *')];
     const copyBlocks=[...paper.querySelectorAll('#editor .tiptap > *')];
     sourceBlocks.forEach((block,i)=>{
       const clone=copyBlocks[i];
       if(!clone)return;
-      const transform=getComputedStyle(block).transform;
-      if(transform&&transform!=='none')clone.style.setProperty('transform',transform);
+      const computed=getComputedStyle(block);
+      const position=computed.position;
+      if(position==='absolute'||position==='relative'){
+        for(const key of ['position','left','top','right','bottom','width','max-width','min-width','margin','box-sizing','z-index']){
+          clone.style.setProperty(key,computed.getPropertyValue(key),'important');
+        }
+      }
+      const transform=computed.transform;
+      if(transform&&transform!=='none')clone.style.setProperty('transform',transform,'important');
+      else if(position==='absolute')clone.style.setProperty('transform','none','important');
     });
+    // Incluye los elementos absolutos que queden por debajo del texto normal.
+    paper.style.minHeight=Math.ceil(sourcePaper.scrollHeight)+'px';
     cleanupClone(paper);
     paper.style.width='100%';
     paper.style.maxWidth=`${paperWidth}px`;
