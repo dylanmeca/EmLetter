@@ -1,14 +1,17 @@
-/* EmLetter Chat · PeerJS, historial por sesión y archivos por WebRTC. */
+/* EmLetter Chat · PeerJS, historial por sesión, archivos en IndexedDB y WebRTC. */
 (() => {
   'use strict';
 
   const KEY_ID = 'emletter.chat.id.v1';
   const KEY_HISTORY = 'emletter.chat.histories.v1';
   const KEY_LAST_PEER = 'emletter.chat.last-peer.v1';
-  const MAX_FILE_BYTES = 25 * 1024 * 1024;
-  const SAVED_FILE_BYTES = 220 * 1024; // sessionStorage tiene una cuota reducida.
-  const CHUNK_BYTES = 16 * 1024;
-  const CHUNKS_PER_BATCH = 8;
+  const CHUNK_BYTES = 16 * 1024; // Seguro para canales de datos WebRTC entre navegadores.
+  const CHUNKS_PER_BATCH = 64; // Ventana de 1 MiB con confirmación tras persistir en IndexedDB.
+  const MAX_BUFFERED_BYTES = 2 * 1024 * 1024;
+  const INLINE_PREVIEW_BYTES = 128 * 1024 * 1024;
+  const BLOB_DOWNLOAD_BYTES = 256 * 1024 * 1024;
+  const DB_NAME = 'emletter-chat-files';
+  const DB_VERSION = 1;
   const MAX_TEXT = 4000;
   const MAX_MESSAGES_PER_CHAT = 150;
   const MAX_CHATS = 10;
@@ -49,7 +52,8 @@
   function fmtBytes(size) {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    if (size < 1024 ** 3) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    return `${(size / 1024 ** 3).toFixed(2)} GB`;
   }
   function setStatus(message) { ui.status.textContent = message; }
   function setConnectionStatus(message, online = false) {
@@ -61,6 +65,10 @@
     ui.files.disabled = !online;
     ui.attach.classList.toggle('is-disabled', !online);
     ui.copy.disabled = !peerReady;
+    ui.connectButton.textContent = online ? 'Desconectar' : 'Conectar';
+    ui.connectButton.classList.toggle('is-disconnect', online);
+    ui.connectButton.setAttribute('aria-label', online ? 'Desconectar a ambas personas' : 'Conectar con el ID del par');
+    ui.peerId.readOnly = online;
   }
 
   function loadHistories() {
@@ -80,7 +88,7 @@
           mime: typeof entry.mime === 'string' ? entry.mime.slice(0, 100) : '',
           size: Number.isFinite(entry.size) ? entry.size : 0,
           status: ['sending', 'sent', 'delivered', 'failed'].includes(entry.status) ? entry.status : 'sent',
-          dataUrl: typeof entry.dataUrl === 'string' && entry.dataUrl.length <= SAVED_FILE_BYTES * 2 ? entry.dataUrl : '',
+          dataUrl: typeof entry.dataUrl === 'string' && entry.dataUrl.length <= 500000 ? entry.dataUrl : '',
           // Una transferencia interrumpida no sigue enviándose al recargar.
           ...(entry.status === 'sending' ? { status: 'failed' } : {})
         }));
@@ -103,6 +111,164 @@
   const incomingFiles = new Map();
   const outgoingFiles = new Map();
   const objectUrls = new Set();
+  const previewLoading = new Set();
+  let dbPromise = null;
+
+  function getDB() {
+    if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB no disponible'));
+    if (!dbPromise) dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: ['id', 'index'] });
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => db.close();
+        resolve(db);
+      };
+      request.onerror = () => reject(request.error || new Error('Error al abrir IndexedDB'));
+      request.onblocked = () => reject(new Error('IndexedDB bloqueada por otra pestaña'));
+    }).catch((error) => { dbPromise = null; throw error; });
+    return dbPromise;
+  }
+  async function readStoredFile(id) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction('files', 'readonly').objectStore('files').get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function saveStoredFile(info) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').put(info);
+      tx.oncomplete = resolve;
+      tx.onabort = () => reject(tx.error || new Error('No hay espacio en IndexedDB'));
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function discardIncompleteFile(id) {
+    try {
+      const db = await getDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(['files', 'chunks'], 'readwrite');
+        tx.objectStore('files').delete(id);
+        tx.objectStore('chunks').delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (_) { /* Se liberará espacio cuando el navegador purgue sus datos. */ }
+  }
+  async function saveChunkBatch(id, chunks) {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('chunks', 'readwrite');
+      const store = tx.objectStore('chunks');
+      for (const chunk of chunks) store.put({ id, index: chunk.index, data: chunk.data });
+      tx.oncomplete = resolve;
+      tx.onabort = () => reject(tx.error || new Error('Error de cuota / almacenamiento'));
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  // Recupera la vista previa en lotes de tamaño limitado.
+  async function storedChunksAsBlob(id, mime, count) {
+    const parts = [];
+    const db = await getDB();
+    for (let first = 0; first < count; first += 128) {
+      const last = Math.min(count, first + 128);
+      const batch = await new Promise((resolve, reject) => {
+        const tx = db.transaction('chunks', 'readonly');
+        const store = tx.objectStore('chunks');
+        const result = new Array(last - first);
+        for (let n = first; n < last; n++) {
+          const req = store.get([id, n]);
+          req.onsuccess = () => { result[n-first] = req.result?.data; };
+        }
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => reject(tx.error);
+      });
+      if (batch.some((part) => !(part instanceof ArrayBuffer) && !ArrayBuffer.isView(part))) {
+        throw new Error('El archivo guardado está incompleto');
+      }
+      parts.push(...batch);
+    }
+    return new Blob(parts, { type: mime || 'application/octet-stream' });
+  }
+  async function downloadStoredFile(message) {
+    try {
+      // El selector exige activación del usuario: solicitarlo ANTES de hacer cualquier await.
+      const needsStreaming = message.direction === 'in' && message.size > BLOB_DOWNLOAD_BYTES;
+      const pickerPromise = needsStreaming && typeof window.showSaveFilePicker === 'function'
+        ? window.showSaveFilePicker({ suggestedName: message.name || 'archivo' }) : null;
+      const record = await readStoredFile(message.id);
+      if (!record || !record.complete) throw new Error('Archivo no disponible en este navegador');
+      if (record.blob) {
+        const url = trackObjectUrl(record.blob);
+        const a = document.createElement('a'); a.href = url; a.download = message.name || 'archivo';
+        document.body.append(a); a.click(); a.remove();
+        return;
+      }
+      if (pickerPromise) {
+        // Streaming sin ensamblar gigabytes en un único Blob; requiere contexto seguro.
+        const handle = await pickerPromise;
+        const writer = await handle.createWritable();
+        try {
+          const db = await getDB();
+          for (let i = 0; i < record.total; i += 128) {
+            const end = Math.min(record.total, i + 128);
+            const batch = await new Promise((resolve, reject) => {
+              const tx = db.transaction('chunks', 'readonly');
+              const store = tx.objectStore('chunks');
+              const parts = new Array(end - i);
+              for (let n = i; n < end; n++) {
+                const req = store.get([message.id, n]);
+                req.onsuccess = () => { parts[n-i] = req.result?.data; };
+              }
+              tx.oncomplete = () => resolve(parts);
+              tx.onerror = () => reject(tx.error);
+            });
+            if (batch.some((part) => !part)) throw new Error('Archivo incompleto en IndexedDB');
+            await writer.write(new Blob(batch));
+          }
+          await writer.close();
+        } catch (error) { await writer.abort().catch(() => {}); throw error; }
+      } else if (record.size <= BLOB_DOWNLOAD_BYTES) {
+        const blob = await storedChunksAsBlob(message.id, record.mime, record.total);
+        const url = trackObjectUrl(blob);
+        const a = document.createElement('a'); a.href = url; a.download = message.name || 'archivo';
+        document.body.append(a); a.click(); a.remove();
+      } else {
+        throw new Error('Para guardar este archivo grande utiliza Chrome o Edge en HTTPS, que permiten escritura directa al disco.');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') setStatus(error.message || 'No se pudo recuperar el archivo.');
+    }
+  }
+  async function loadFilePreview(message) {
+    if (message.objectUrl || message.dataUrl || message.previewResolved ||
+        previewLoading.has(message.id) || message.storageMissing) return;
+    previewLoading.add(message.id);
+    try {
+      const file = await readStoredFile(message.id);
+      if (!file?.complete) { message.storageMissing = true; return; }
+      message.stored = true;
+      message.previewResolved = true;
+      if (file.blob) {
+        message.objectUrl = trackObjectUrl(file.blob);
+      } else if (file.size <= INLINE_PREVIEW_BYTES &&
+          (allowedImage(file.mime) || allowedVideo(file.mime) || allowedAudio(file.mime))) {
+        message.objectUrl = trackObjectUrl(await storedChunksAsBlob(message.id, file.mime, file.total));
+      }
+    } catch (_) { message.storageMissing = true; }
+    finally {
+      previewLoading.delete(message.id);
+      if (activePeerId && histories[activePeerId]?.includes(message)) render();
+    }
+  }
 
   function saveHistories() {
     const serializable = {};
@@ -125,7 +291,7 @@
         delete item.dataUrl;
         const original = histories[Object.keys(serializable).find((id) => serializable[id] === entries)]?.find((m) => m.id === item.id);
         if (original) original.dataUrl = '';
-        if (sessionSet(KEY_HISTORY, JSON.stringify(serializable))) { setStatus('Historial guardado; los archivos grandes no se conservan al recargar.'); return; }
+        if (sessionSet(KEY_HISTORY, JSON.stringify(serializable))) { setStatus('Historial guardado. Los adjuntos nuevos se conservan en IndexedDB.'); return; }
       }
     }
     // Cuota extraordinariamente baja: conservar mensajes recientes en vez de fallar.
@@ -208,8 +374,14 @@
       audio.src = url; audio.controls = true; audio.preload = 'metadata';
       wrapper.append(audio);
     }
-    const link = el(url ? 'a' : 'div', 'chat-file-link');
-    if (url) { link.href = url; link.download = message.name || 'archivo'; }
+    const link = el(url && !message.stored ? 'a' : 'button', 'chat-file-link');
+    if (link.tagName === 'A') {
+      link.href = url; link.download = message.name || 'archivo';
+    } else {
+      link.type = 'button';
+      link.addEventListener('click', () => downloadStoredFile(message));
+      if (!message.stored && !url) link.disabled = true;
+    }
     link.append(el('span', 'chat-file-icon', '⇩'));
     const details = el('span', 'chat-file-details');
     details.append(el('span', 'chat-file-name', message.name || 'Archivo'));
@@ -218,9 +390,17 @@
     details.append(el('span', 'chat-file-type', `${label} · ${fmtBytes(message.size || 0)}`));
     link.append(details);
     wrapper.append(link);
-    if (!url && message.status !== 'sending') wrapper.append(el('div', 'chat-file-unavailable', 'Archivo no disponible tras recargar esta página.'));
+    if (!url && message.status !== 'sending' && !message.stored) {
+      wrapper.append(el('div', 'chat-file-unavailable', message.storageMissing ?
+        'Este archivo no está disponible en este navegador.' : 'Buscando archivo en IndexedDB…'));
+    }
+    if (!url && message.stored && message.size > INLINE_PREVIEW_BYTES &&
+        (allowedVideo(type) || allowedAudio(type) || allowedImage(type))) {
+      wrapper.append(el('div', 'chat-file-unavailable', 'Archivo grande: disponible para guardar, sin vista previa en memoria.'));
+    }
     if (message.status === 'sending') wrapper.append(el('div', 'chat-file-progress', message.progress || 'Transfiriendo archivo…'));
     bubble.append(wrapper);
+    if (message.status !== 'sending' && !url && !message.storageMissing) void loadFilePreview(message);
   }
   function render() {
     ui.messages.replaceChildren();
@@ -309,115 +489,194 @@
     objectUrls.add(url);
     return url;
   }
-  function retainSmallFile(blob, id, peerId = activePeerId) {
-    if (blob.size > SAVED_FILE_BYTES || typeof FileReader === 'undefined') return;
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      if (typeof reader.result === 'string') updateMessageInChat(peerId, id, { dataUrl: reader.result });
-    });
-    reader.readAsDataURL(blob);
-  }
   async function sendFile(file) {
     if (!online()) { setStatus('Primero conecta con la otra persona.'); return; }
-    if (file.size > MAX_FILE_BYTES) {
-      setStatus(`«${file.name}» supera el límite de ${fmtBytes(MAX_FILE_BYTES)} por archivo.`);
-      return;
-    }
     const id = messageId();
     const recipient = activePeerId;
     const initialConnection = connection;
     const name = (file.name || 'archivo').slice(0, 180);
+    const mime = (file.type || 'application/octet-stream').slice(0, 100);
     const time = Date.now();
+    const total = Math.ceil(file.size / CHUNK_BYTES);
+    if (!Number.isSafeInteger(file.size) || !Number.isSafeInteger(total)) {
+      setStatus('Este archivo es demasiado grande para los límites numéricos del navegador.'); return;
+    }
     const url = trackObjectUrl(file);
-    addMessage({ id, kind: 'file', direction: 'out', name, mime: file.type || 'application/octet-stream',
-      size: file.size, time, status: 'sending', objectUrl: url, progress: 'Preparando archivo…' });
-    retainSmallFile(file, id, recipient);
-    try {
-      const buffer = await file.arrayBuffer();
-      if (!online() || initialConnection !== connection || recipient !== activePeerId) throw new Error('Se cambió de conversación');
-      outgoingFiles.set(id, { id, buffer, next: 0, total: Math.ceil(file.size / CHUNK_BYTES),
-        connection, time, waiting: false });
-      const result = safeSend({ kind: 'file-meta', id, name, mime: file.type || 'application/octet-stream',
-        size: file.size, time, total: Math.ceil(file.size / CHUNK_BYTES) });
-      if (!result) throw new Error('Error al iniciar el envío');
-      updateMessage(id, { progress: 'Esperando al destinatario…' });
-    } catch (_) {
+    addMessage({ id, kind: 'file', direction: 'out', name, mime, size: file.size,
+      time, status: 'sending', objectUrl: url, progress: 'Preparando archivo…' });
+    // Guardar en segundo plano, sin bloquear el envío. El Blob queda en IndexedDB.
+    saveStoredFile({ id, peerId: recipient, name, mime, size: file.size,
+      time, total, complete: true, blob: file }).then(() => {
+      updateMessageInChat(recipient, id, { stored: true });
+    }).catch(() => setStatus('Archivo enviado, pero no hay espacio para conservar una copia local.'));
+    if (!online() || initialConnection !== connection || recipient !== activePeerId) {
+      updateMessageInChat(recipient, id, { status: 'failed' }); return;
+    }
+    outgoingFiles.set(id, { id, file, next: 0, confirmed: 0, total, connection: initialConnection,
+      peerId: recipient, sending: false, waiting: false, lastActivity: Date.now() });
+    if (!safeSend({ kind: 'file-meta', id, name, mime, size: file.size, time, total })) {
       outgoingFiles.delete(id);
       updateMessageInChat(recipient, id, { status: 'failed' });
-      setStatus('No se pudo preparar el archivo para transferirlo.');
+      setStatus('No se pudo iniciar la transferencia.');
+      return;
     }
+    updateMessageInChat(recipient, id, { progress: 'Esperando al destinatario…' });
   }
-  function sendFileWindow(id) {
+  async function sendFileWindow(id) {
     const transfer = outgoingFiles.get(id);
-    if (!transfer || transfer.waiting || !online() || transfer.connection !== connection) return;
-    transfer.waiting = true;
-    let sentInBatch = 0;
-    while (transfer.next < transfer.total && sentInBatch < CHUNKS_PER_BATCH) {
-      const start = transfer.next * CHUNK_BYTES;
-      const data = transfer.buffer.slice(start, start + CHUNK_BYTES);
-      const ok = safeSend({ kind: 'file-chunk', id, index: transfer.next, data });
-      if (!ok) {
-        outgoingFiles.delete(id);
-        updateMessage(id, { status: 'failed' });
-        setStatus('La transferencia del archivo se interrumpió.');
-        return;
+    if (!transfer || transfer.sending || transfer.waiting || !online() || transfer.connection !== connection) return;
+    transfer.sending = true;
+    try {
+      const end = Math.min(transfer.next + CHUNKS_PER_BATCH, transfer.total);
+      if (end === transfer.next) return;
+      const startByte = transfer.next * CHUNK_BYTES;
+      const block = await transfer.file.slice(startByte, end * CHUNK_BYTES).arrayBuffer();
+      if (connection !== transfer.connection || !online()) throw new Error('Se perdió la conexión');
+      for (let i = transfer.next; i < end; i++) {
+        // Reduce picos del búfer del canal, especialmente en redes móviles.
+        while (connection?.dataChannel && connection.dataChannel.bufferedAmount > MAX_BUFFERED_BYTES) {
+          await new Promise((resolve) => setTimeout(resolve, 12));
+          if (connection !== transfer.connection || !online()) throw new Error('Desconectado');
+        }
+        const from = (i - transfer.next) * CHUNK_BYTES;
+        if (!safeSend({ kind: 'file-chunk', id, index: i, data: block.slice(from, from + CHUNK_BYTES) })) {
+          throw new Error('No se pudo enviar un bloque');
+        }
       }
-      transfer.next++;
-      sentInBatch++;
-    }
-    const percentage = transfer.total ? Math.round(100 * transfer.next / transfer.total) : 100;
-    updateMessage(id, { progress: `Enviando… ${percentage}%` });
-    // El receptor debe confirmar cada grupo antes de seguir, evitando saturar WebRTC.
+      transfer.next = end;
+      transfer.waiting = true;
+      transfer.lastActivity = Date.now();
+      updateMessageInChat(transfer.peerId, id, { progress: `Enviando… ${Math.round(100 * transfer.confirmed / (transfer.total || 1))}%` });
+    } catch (_) {
+      outgoingFiles.delete(id);
+      updateMessageInChat(transfer.peerId, id, { status: 'failed', progress: '' });
+      setStatus('La transferencia se interrumpió.');
+    } finally { transfer.sending = false; }
   }
-  function handleFileMeta(packet) {
+  async function handleFileMeta(packet) {
     if (!validMessageId(packet.id) || typeof packet.name !== 'string' || packet.name.length > 180 ||
         typeof packet.mime !== 'string' || packet.mime.length > 100 ||
-        !Number.isSafeInteger(packet.size) || packet.size < 0 || packet.size > MAX_FILE_BYTES ||
-        !Number.isInteger(packet.total) || packet.total !== Math.ceil(packet.size / CHUNK_BYTES) ||
+        !Number.isSafeInteger(packet.size) || packet.size < 0 ||
+        !Number.isSafeInteger(packet.total) || packet.total !== Math.ceil(packet.size / CHUNK_BYTES) ||
         !validTime(packet.time)) return;
     if (getMessage(packet.id)) { safeSend({ kind: 'ack', id: packet.id }); return; }
     if (incomingFiles.has(packet.id)) return;
-    incomingFiles.set(packet.id, { id: packet.id, name: packet.name, mime: packet.mime,
-      size: packet.size, time: packet.time, total: packet.total, chunks: [], received: 0, next: 0 });
-    safeSend({ kind: 'file-ready', id: packet.id });
-    if (packet.size === 0) finishIncomingFile(packet.id);
-  }
-  function finishIncomingFile(id) {
-    const transfer = incomingFiles.get(id);
-    if (!transfer) return;
-    if (transfer.received !== transfer.size || transfer.next !== transfer.total) {
-      incomingFiles.delete(id);
-      return;
+    const bound = connection;
+    const transfer = { id: packet.id, name: packet.name, mime: packet.mime, size: packet.size,
+      time: packet.time, total: packet.total, next: 0, received: 0, pending: [], writing: false,
+      connection: bound, peerId: activePeerId };
+    incomingFiles.set(packet.id, transfer);
+    try {
+      if (window.navigator?.storage?.estimate) {
+        const estimate = await window.navigator.storage.estimate();
+        if (Number.isFinite(estimate.quota) && Number.isFinite(estimate.usage) &&
+            transfer.size > Math.max(0, estimate.quota - estimate.usage - 4 * 1024 * 1024)) {
+          throw new Error('Espacio disponible insuficiente para este archivo');
+        }
+      }
+      await saveStoredFile({ id: transfer.id, peerId: transfer.peerId, name: transfer.name,
+        mime: transfer.mime, size: transfer.size, time: transfer.time, total: transfer.total, complete: false });
+      if (connection !== bound || incomingFiles.get(packet.id) !== transfer) return;
+      // Mostrar el avance también en el lado receptor.
+      addMessage({ id: transfer.id, kind: 'file', direction: 'in', name: transfer.name,
+        mime: transfer.mime, size: transfer.size, time: transfer.time,
+        status: 'sending', progress: 'Recibiendo… 0%' });
+      if (transfer.total === 0) await finishIncomingFile(packet.id);
+      else safeSend({ kind: 'file-ready', id: packet.id });
+    } catch (_) {
+      incomingFiles.delete(packet.id);
+      void discardIncompleteFile(packet.id);
+      safeSend({ kind: 'file-error', id: packet.id });
+      setStatus('No se pudo guardar el archivo: IndexedDB no está disponible o no tiene espacio.');
     }
-    incomingFiles.delete(id);
-    const blob = new Blob(transfer.chunks, { type: transfer.mime });
-    const url = trackObjectUrl(blob);
-    addMessage({ id, kind: 'file', direction: 'in', name: transfer.name, mime: transfer.mime,
-      size: transfer.size, time: transfer.time, status: 'delivered', objectUrl: url });
-    retainSmallFile(blob, id);
-    safeSend({ kind: 'ack', id });
-    setStatus(`Archivo recibido: ${transfer.name}`);
+  }
+  async function finishIncomingFile(id) {
+    const transfer = incomingFiles.get(id);
+    if (!transfer || transfer.received !== transfer.size || transfer.next !== transfer.total) return;
+    try {
+      await saveStoredFile({ id, peerId: transfer.peerId, name: transfer.name,
+        mime: transfer.mime, size: transfer.size, time: transfer.time,
+        total: transfer.total, complete: true });
+      if (incomingFiles.get(id) !== transfer || connection !== transfer.connection) return;
+      incomingFiles.delete(id);
+      updateMessageInChat(transfer.peerId, id, { status: 'delivered', stored: true, progress: '' });
+      safeSend({ kind: 'ack', id });
+      setStatus(`Archivo recibido: ${transfer.name}`);
+    } catch (_) {
+      incomingFiles.delete(id);
+      void discardIncompleteFile(id);
+      updateMessageInChat(transfer.peerId, id, { status: 'failed', progress: '' });
+      safeSend({ kind: 'file-error', id });
+      setStatus('No se pudo finalizar el archivo en IndexedDB.');
+    }
+  }
+  async function flushFileBatch(transfer) {
+    if (transfer.writing) return;
+    transfer.writing = true;
+    const batch = transfer.pending.splice(0);
+    try {
+      await saveChunkBatch(transfer.id, batch);
+      if (incomingFiles.get(transfer.id) !== transfer || connection !== transfer.connection) return;
+      if (transfer.next === transfer.total) {
+        await finishIncomingFile(transfer.id);
+      } else {
+        const percent = Math.round(100 * transfer.received / (transfer.size || 1));
+        updateMessageInChat(transfer.peerId, transfer.id, { progress: `Recibiendo… ${percent}%` });
+        safeSend({ kind: 'file-progress', id: transfer.id, next: transfer.next });
+      }
+    } catch (_) {
+      incomingFiles.delete(transfer.id);
+      void discardIncompleteFile(transfer.id);
+      updateMessageInChat(transfer.peerId, transfer.id, { status: 'failed', progress: '' });
+      safeSend({ kind: 'file-error', id: transfer.id });
+      setStatus('No hay espacio suficiente en IndexedDB o falló la escritura del archivo.');
+    } finally { transfer.writing = false; }
   }
   function handleFileChunk(packet) {
     const transfer = incomingFiles.get(packet.id);
-    if (!transfer || !Number.isInteger(packet.index) || packet.index !== transfer.next) return;
+    if (!transfer || transfer.writing || !Number.isSafeInteger(packet.index) || packet.index !== transfer.next) return;
     const bytes = packet.data;
     const isBuffer = bytes instanceof ArrayBuffer || Object.prototype.toString.call(bytes) === '[object ArrayBuffer]';
     if (!isBuffer && !ArrayBuffer.isView(bytes)) return;
     const buffer = isBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    if (buffer.byteLength > CHUNK_BYTES || transfer.received + buffer.byteLength > transfer.size) {
-      incomingFiles.delete(packet.id);
-      return;
-    }
-    transfer.chunks.push(buffer);
+    if (buffer.byteLength > CHUNK_BYTES || transfer.received + buffer.byteLength > transfer.size) return;
+    transfer.pending.push({ index: transfer.next, data: buffer });
     transfer.received += buffer.byteLength;
     transfer.next++;
-    if (transfer.next === transfer.total) finishIncomingFile(packet.id);
-    else if (transfer.next % CHUNKS_PER_BATCH === 0) safeSend({ kind: 'file-progress', id: packet.id, next: transfer.next });
+    if (transfer.next === transfer.total || transfer.pending.length === CHUNKS_PER_BATCH) {
+      void flushFileBatch(transfer);
+    }
   }
   function handleData(packet) {
     if (!packet || typeof packet !== 'object' || typeof packet.kind !== 'string') return;
     switch (packet.kind) {
+      case 'disconnect': {
+        if (connection) {
+          const old = connection;
+          connection = null;
+          old.close();
+          clearTransfers();
+          setConnectionStatus('Desconectado · conversación finalizada');
+          setStatus('La otra persona ha finalizado la conexión.');
+        }
+        break;
+      }
+      case 'file-error': {
+        const outgoing = outgoingFiles.get(packet.id);
+        if (outgoing) {
+          outgoingFiles.delete(packet.id);
+          updateMessageInChat(outgoing.peerId, packet.id, { status: 'failed', progress: '' });
+          setStatus('El otro navegador no pudo guardar el archivo.');
+        }
+        const incoming = incomingFiles.get(packet.id);
+        if (incoming) {
+          incomingFiles.delete(packet.id);
+          void discardIncompleteFile(packet.id);
+          updateMessageInChat(incoming.peerId, packet.id, { status: 'failed', progress: '' });
+          setStatus('La transferencia se interrumpió en el otro navegador.');
+        }
+        break;
+      }
       case 'text': {
         if (!validMessageId(packet.id) || typeof packet.text !== 'string' ||
             !packet.text.trim() || packet.text.length > MAX_TEXT || !validTime(packet.time)) return;
@@ -443,16 +702,19 @@
       case 'file-ready':
         if (validMessageId(packet.id)) {
           const transfer = outgoingFiles.get(packet.id);
-          if (transfer && transfer.total === 0) { /* El receptor enviará ACK directamente. */ }
-          else if (transfer) sendFileWindow(packet.id);
+          if (transfer && transfer.total > 0) void sendFileWindow(packet.id);
         }
         break;
       case 'file-progress': {
         const transfer = outgoingFiles.get(packet.id);
         if (transfer && Number.isInteger(packet.next) && packet.next === transfer.next &&
-            packet.next <= transfer.total) {
+            packet.next > transfer.confirmed && packet.next <= transfer.total) {
+          transfer.confirmed = packet.next;
+          transfer.lastActivity = Date.now();
           transfer.waiting = false;
-          sendFileWindow(packet.id);
+          updateMessageInChat(transfer.peerId, packet.id,
+            { progress: `Enviando… ${Math.round(100 * transfer.confirmed / (transfer.total || 1))}%` });
+          void sendFileWindow(packet.id);
         }
         break;
       }
@@ -460,7 +722,12 @@
     }
   }
   function clearTransfers() {
-    for (const id of outgoingFiles.keys()) updateMessage(id, { status: 'failed', progress: '' });
+    for (const transfer of outgoingFiles.values())
+      updateMessageInChat(transfer.peerId, transfer.id, { status: 'failed', progress: '' });
+    for (const transfer of incomingFiles.values()) {
+      updateMessageInChat(transfer.peerId, transfer.id, { status: 'failed', progress: '' });
+      void discardIncompleteFile(transfer.id);
+    }
     outgoingFiles.clear();
     incomingFiles.clear();
     hideTyping();
@@ -506,6 +773,19 @@
         setConnectionStatus('No se pudo conectar');
       }
     });
+  }
+  function disconnectChat() {
+    if (!connection) return;
+    const old = connection;
+    const other = old.peer;
+    if (old.open) safeSend({ kind: 'disconnect' });
+    connection = null;
+    clearTransfers();
+    clearTimeout(connectingTimeout);
+    setConnectionStatus('Desconectado · conversación finalizada');
+    setStatus(`Has finalizado el chat con ${other}. Puedes volver a conectar.`);
+    // Da tiempo a que el paquete de despedida salga antes de cerrar el canal.
+    setTimeout(() => { try { old.close(); } catch (_) {} }, 180);
   }
   function connectTo(id) {
     if (!isFiveDigits(id)) { setStatus('Introduce un ID válido de cinco números.'); return; }
@@ -586,7 +866,8 @@
 
   ui.connectForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    connectTo(ui.peerId.value.trim());
+    if (online()) disconnectChat();
+    else connectTo(ui.peerId.value.trim());
   });
   ui.peerId.addEventListener('input', () => { ui.peerId.value = ui.peerId.value.replace(/\D/g, '').slice(0, 5); });
   ui.copy.addEventListener('click', async () => {
@@ -624,6 +905,18 @@
   ui.attach.addEventListener('click', (event) => {
     if (!online()) { event.preventDefault(); setStatus('Primero conecta con la otra persona.'); }
   });
+  // Detecta transferencias sin progreso; no deja la interfaz eternamente en «Enviando».
+  setInterval(() => {
+    const now = Date.now();
+    for (const transfer of outgoingFiles.values()) {
+      if (transfer.waiting && now - transfer.lastActivity > 60000) {
+        outgoingFiles.delete(transfer.id);
+        updateMessageInChat(transfer.peerId, transfer.id, { status: 'failed', progress: '' });
+        safeSend({ kind: 'file-error', id: transfer.id });
+        setStatus('La transferencia se detuvo por falta de respuesta.');
+      }
+    }
+  }, 15000);
   window.addEventListener('beforeunload', () => {
     for (const url of objectUrls) URL.revokeObjectURL(url);
   });
