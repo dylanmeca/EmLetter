@@ -9,6 +9,7 @@
   const clamp=n=>Math.max(-MAX,Math.min(MAX,Math.round(n)));
   const zero=()=>({blocks:[],decor:{},stickers:[]});
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
+  let clipboardItem=null,menuTarget=null,menuPoint=null,contextTimer=null;
   const decorations={
     ornament:' .ornament-top',
     central:'.ornament-symbol',
@@ -32,6 +33,29 @@
     return nodes;
   };
   const signature=n=>n.tagName+'|'+(n.tagName==='IMG'?n.getAttribute('src')||'':n.textContent||'').trim().slice(0,120);
+  const cleanTextStyle=value=>{
+    if(!value||typeof value!=='object')return {};
+    const style={};
+    if(typeof value.fontFamily==='string'&&/^[\w\s,'"-]{1,140}$/.test(value.fontFamily))style.fontFamily=value.fontFamily;
+    if(Number.isFinite(Number(value.fontSize))&&Number(value.fontSize)>=8&&Number(value.fontSize)<=120)style.fontSize=Math.round(Number(value.fontSize));
+    if(/^(normal|bold|[1-9]00)$/.test(String(value.fontWeight)))style.fontWeight=String(value.fontWeight);
+    if(/^(normal|italic|oblique)$/.test(String(value.fontStyle)))style.fontStyle=value.fontStyle;
+    if(/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(String(value.color)))style.color=value.color;
+    if(/^(left|center|right|justify)$/.test(String(value.textAlign)))style.textAlign=value.textAlign;
+    return style;
+  };
+  function computedTextStyle(el){
+    const s=getComputedStyle(el);
+    return cleanTextStyle({fontFamily:s.fontFamily,fontSize:parseFloat(s.fontSize),fontWeight:s.fontWeight,fontStyle:s.fontStyle,color:s.color,textAlign:s.textAlign});
+  }
+  function applyTextStyle(el,style){
+    el.style.fontFamily=style?.fontFamily||'';
+    el.style.fontSize=style?.fontSize?style.fontSize+'px':'';
+    el.style.fontWeight=style?.fontWeight||'';
+    el.style.fontStyle=style?.fontStyle||'';
+    el.style.color=style?.color||'';
+    el.style.textAlign=style?.textAlign||'';
+  }
   function normalize(value){
     const clean=zero();
     if(!value||typeof value!=='object')return clean;
@@ -49,7 +73,7 @@
     }
     if(Array.isArray(value.stickers))for(const sticker of value.stickers.slice(0,80)){
       if(!sticker||typeof sticker.text!=='string'||!Number.isFinite(sticker.x)||!Number.isFinite(sticker.y))continue;
-      clean.stickers.push({id:typeof sticker.id==='string'&&/^s[\da-z]{1,16}$/.test(sticker.id)?sticker.id:'s'+Math.random().toString(36).slice(2,9),text:sticker.text.slice(0,240),x:clamp(sticker.x),y:clamp(sticker.y)});
+      clean.stickers.push({id:typeof sticker.id==='string'&&/^s[\da-z]{1,16}$/.test(sticker.id)?sticker.id:'s'+Math.random().toString(36).slice(2,9),text:sticker.text.slice(0,2000),x:clamp(sticker.x),y:clamp(sticker.y),style:cleanTextStyle(sticker.style)});
     }
     return clean;
   }
@@ -127,23 +151,25 @@
         el.setAttribute('aria-label','Texto o emoji libre');
         if(edit){
           el.contentEditable='true';el.setAttribute('spellcheck','true');
-          el.addEventListener('input',()=>{sticker.text=el.textContent.slice(0,240);changed()});
+          el.addEventListener('input',()=>{sticker.text=el.textContent.slice(0,2000);changed()});
           el.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();el.blur()}});
         }
         layer.append(el);
       }
       if(document.activeElement!==el)el.textContent=sticker.text;
+      applyTextStyle(el,sticker.style);
       if(!active||el!==active.element)transform(el,sticker.x,sticker.y);
     }
   }
   let serial=0;
-  function addSticker(text){
-    if(layout.stickers.length>=80){showHint('Has alcanzado el máximo de textos libres.');return}
-    const sticker={id:'s'+Date.now().toString(36)+(serial++).toString(36),text,x:Math.max(8,Math.round(editingPaper.clientWidth*.2)),y:Math.max(40,Math.round(editingPaper.scrollHeight*.4))};
+  function addSticker(text,options={}){
+    if(layout.stickers.length>=80){showHint('Has alcanzado el máximo de textos libres.');return null}
+    if(!text||text.length>2000){showHint('El texto debe tener entre 1 y 2000 caracteres.');return null}
+    const sticker={id:'s'+Date.now().toString(36)+(serial++).toString(36),text,x:clamp(options.x??Math.max(8,Math.round(editingPaper.clientWidth*.2))),y:clamp(options.y??Math.max(40,Math.round(editingPaper.scrollHeight*.4))),style:cleanTextStyle(options.style)};
     layout.stickers.push(sticker);renderStickers(editingPaper);changed();
     const el=editingPaper.querySelector(`[data-sticker-id="${sticker.id}"]`);
-    el?.focus();if(el){const range=document.createRange();range.selectNodeContents(el);getSelection().removeAllRanges();getSelection().addRange(range)}
-    showHint('Edita el texto libre; para colocarlo haz doble clic derecho y muévelo.');
+    if(options.focus!==false&&el){el.focus();const range=document.createRange();range.selectNodeContents(el);getSelection().removeAllRanges();getSelection().addRange(range)}
+    return sticker;
   }
   document.querySelector('#add-floating-text')?.addEventListener('click',()=>addSticker('Escribe aquí'));
   document.querySelector('#add-floating-emoji')?.addEventListener('click',()=>addSticker('🖤'));
@@ -215,18 +241,163 @@
     showHint('Posición fijada · doble clic derecho en otro elemento para moverlo');
     apply(editingPaper);
   }
+  const editor=()=>root?.editor;
+  const contextMenu=document.createElement('div');
+  contextMenu.className='emletter-context-menu';contextMenu.hidden=true;
+  contextMenu.setAttribute('role','menu');contextMenu.setAttribute('aria-label','Acciones del elemento');
+  contextMenu.innerHTML='<button type="button" data-action="duplicate" role="menuitem">Duplicar</button><button type="button" data-action="copy" role="menuitem">Copiar</button><button type="button" data-action="paste" role="menuitem">Pegar</button>';
+  document.body.append(contextMenu);
+  function hideMenu(){clearTimeout(contextTimer);contextMenu.hidden=true;menuTarget=null}
+  function menuAt(target,ev){
+    const clientX=ev.clientX??ev.x??8,clientY=ev.clientY??ev.y??8;
+    menuTarget=target;menuPoint={x:clientX,y:clientY};
+    contextMenu.querySelector('[data-action="duplicate"]').disabled=!target;
+    contextMenu.querySelector('[data-action="copy"]').disabled=!target;
+    contextMenu.querySelector('[data-action="paste"]').disabled=!clipboardItem;
+    contextMenu.hidden=false;
+    const w=contextMenu.offsetWidth,h=contextMenu.offsetHeight;
+    contextMenu.style.left=Math.max(8,Math.min(innerWidth-w-8,clientX))+'px';
+    contextMenu.style.top=Math.max(8,Math.min(innerHeight-h-8,clientY))+'px';
+  }
+  const pointOnPaper=point=>{
+    const r=editingPaper.getBoundingClientRect();
+    return {x:clamp(point.x-r.left),y:clamp(point.y-r.top)};
+  };
+  // Se utiliza la instancia pública que Tiptap adjunta a .tiptap.
+  function nodeAtElement(element){
+    const ed=editor();if(!ed||!element)return null;
+    let result=null;
+    ed.state.doc.descendants((node,pos)=>{
+      if(ed.view.nodeDOM(pos)===element){result={node,pos};return false}
+    });
+    return result;
+  }
+  function clipFrom(item){
+    if(!item)return null;
+    if(item.kind==='sticker'){
+      const s=layout.stickers.find(s=>s.id===item.key);
+      return s?{type:'sticker',text:s.text,style:s.style||{}}:null;
+    }
+    if(item.kind==='decor')return {type:'sticker',text:item.element.textContent.trim(),style:computedTextStyle(item.element)};
+    const details=nodeAtElement(item.element);
+    if(details?.node.type.name==='image')return {type:'image',json:details.node.toJSON()};
+    const text=item.element.textContent||'';
+    if(!text||text.length>2000)return null;
+    return {type:'sticker',text,style:computedTextStyle(item.element)};
+  }
+  function pasteClip(clip,pt){
+    if(!clip)return;
+    if(clip.type==='image'){
+      const ed=editor();if(!ed)return;
+      ed.chain().focus().insertContent(clip.json).run();
+      showHint('Imagen duplicada en el editor.');return;
+    }
+    const pos=pointOnPaper(pt);
+    const added=addSticker(clip.text,{...pos,style:clip.style,focus:false});
+    if(added)showHint('Copia creada.');
+  }
+  contextMenu.addEventListener('click',ev=>{
+    const button=ev.target.closest('button[data-action]');if(!button||button.disabled)return;
+    const action=button.dataset.action,target=menuTarget,point=menuPoint;
+    if(action==='copy'||action==='duplicate'){
+      const selection=getSelection();
+      const selected=selection?.toString()||'';
+      // Si el usuario seleccionó una frase, se copia esa frase; de lo contrario, el bloque entero.
+      const selectionInside=selection?.anchorNode&&root?.contains(selection.anchorNode)&&target?.element&&(selection.anchorNode===target.element||target.element.contains(selection.anchorNode));
+      clipboardItem=selected&&selected.length<=2000&&selectionInside?{type:'sticker',text:selected,style:computedTextStyle(target?.element||root)}:clipFrom(target);
+      if(action==='copy'&&clipboardItem?.type==='sticker')navigator.clipboard?.writeText(clipboardItem.text).catch(()=>{});
+    }
+    const clip=action==='paste'?clipboardItem:action==='duplicate'?clipboardItem:null;
+    hideMenu();
+    if(clip)pasteClip(clip,{x:point.x+24,y:point.y+24});
+    else if(action==='copy')showHint(clipboardItem?'Elemento copiado.':'No se pudo copiar este elemento.');
+  });
+  document.addEventListener('pointerdown',ev=>{if(!contextMenu.hidden&&!contextMenu.contains(ev.target))hideMenu()},true);
+  document.addEventListener('scroll',()=>{if(!contextMenu.hidden)hideMenu()},true);
+  // La selección nativa no siempre selecciona emoji (en especial ZWJ y modificadores).
+  // Se identifica el grafema en la posición real del clic, no una palabra vecina.
+  function emojiAtPoint(block,ed,x,y){
+    const walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT);
+    const splitter=typeof Intl.Segmenter==='function'?new Intl.Segmenter('es',{granularity:'grapheme'}):null;
+    let textNode;
+    while((textNode=walker.nextNode())){
+      const value=textNode.textContent||'';
+      const segments=splitter?[...splitter.segment(value)]:Array.from(value).map((segment,index)=>({segment,index}));
+      for(const part of segments){
+        if(!/\p{Extended_Pictographic}/u.test(part.segment))continue;
+        const range=document.createRange();
+        range.setStart(textNode,part.index);range.setEnd(textNode,part.index+part.segment.length);
+        for(const rect of range.getClientRects()){
+          if(x<rect.left-3||x>rect.right+3||y<rect.top-3||y>rect.bottom+3)continue;
+          const from=ed.view.posAtDOM(textNode,part.index),to=from+part.segment.length;
+          if(ed.state.doc.textBetween(from,to,'','')===part.segment)return {text:part.segment,from,to};
+        }
+      }
+    }
+    return null;
+  }
+  // Doble clic izquierdo sobre texto: lo convierte en un elemento libre.
+  // Si el objetivo es un emoji, sólo separa ese emoji del resto del párrafo.
+  editingPaper.addEventListener('dblclick',ev=>{
+    if(ev.button!==0||active)return;
+    const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
+    if(!source)return;
+    const item=getTarget(source);
+    if(item?.kind==='sticker'){
+      ev.preventDefault();begin(item,ev);return;
+    }
+    const block=source.closest('#editor .tiptap p,#editor .tiptap h1,#editor .tiptap h2,#editor .tiptap h3');
+    if(!block||!root?.contains(block))return;
+    const ed=editor(),info=nodeAtElement(block);
+    if(!ed||!info||!['paragraph','heading'].includes(info.node.type.name))return;
+    const text=info.node.textContent;
+    if(!text||text.length>2000){showHint('Este bloque es demasiado largo para convertirlo en texto libre.');return}
+    if(layout.stickers.length>=80){showHint('Has alcanzado el máximo de textos libres.');return}
+    const emoji=emojiAtPoint(block,ed,ev.clientX,ev.clientY);
+    const rect=block.getBoundingClientRect(),style=computedTextStyle(source);
+    const point=pointOnPaper({x:emoji?ev.clientX:rect.left,y:emoji?ev.clientY:rect.top});
+    if(emoji){
+      ev.preventDefault();
+      if(ed.commands.deleteRange({from:emoji.from,to:emoji.to})){
+        const created=addSticker(emoji.text,{...point,style,focus:false});
+        if(created){
+          const el=editingPaper.querySelector(`[data-sticker-id="${created.id}"]`);
+          if(el)begin({kind:'sticker',key:created.id,element:el},ev);
+          showHint('Emoji libre: mueve el cursor y haz doble clic derecho para fijarlo.');
+        }
+      }
+      return;
+    }
+    // El párrafo se retira del documento, para evitar mostrarlo dos veces.
+    ev.preventDefault();
+    const original=info.node.toJSON();
+    const originalIndex=children(editingPaper).indexOf(block),originalSignature=signature(block);
+    const deleted=ed.commands.deleteRange({from:info.pos,to:info.pos+info.node.nodeSize});
+    if(!deleted)return;
+    layout.blocks=layout.blocks.filter(b=>b.i!==originalIndex&&b.s!==originalSignature);
+    const created=addSticker(text,{...point,style,focus:false});
+    if(!created){ed.commands.insertContentAt(info.pos,original);return}
+    const element=editingPaper.querySelector(`[data-sticker-id="${created.id}"]`);
+    if(element){begin({kind:'sticker',key:created.id,element},{clientX:ev.clientX,clientY:ev.clientY});}
+    showHint('Texto libre: mueve el cursor y haz doble clic derecho para fijarlo.');
+  });
   editingPaper.addEventListener('contextmenu',event=>{
     const item=getTarget(event.target);
-    if(!item&&!active)return;
+    if(!item&&!active&&!clipboardItem)return;
     event.preventDefault();
     const now=performance.now();
-    // Se necesitan dos pulsaciones del botón derecho, sin dejarlo presionado.
     const dbl=lastRight&&now-lastRight.time<540&&Math.hypot(lastRight.x-event.clientX,lastRight.y-event.clientY)<28;
     lastRight={time:now,x:event.clientX,y:event.clientY};
-    if(!dbl)return;
-    lastRight=null;
-    if(active){finish(true);return}
-    if(item)begin(item,event);
+    clearTimeout(contextTimer);
+    if(dbl){
+      lastRight=null;hideMenu();
+      if(active){finish(true);return}
+      if(item)begin(item,event);
+      return;
+    }
+    if(active)return;
+    const point={x:event.clientX,y:event.clientY};
+    contextTimer=setTimeout(()=>menuAt(item,point),260);
   });
   document.addEventListener('pointermove',event=>{
     if(!active||event.pointerType==='touch')return;
@@ -236,6 +407,7 @@
     transform(active.element,active.x,active.y);
   },{passive:true});
   document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!contextMenu.hidden){hideMenu();event.preventDefault();return}
     if(!active)return;
     if(event.key==='Escape'){finish(false);event.preventDefault()}
     if(event.key==='Enter'){finish(true);event.preventDefault()}
