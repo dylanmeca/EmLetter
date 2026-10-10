@@ -7,6 +7,23 @@ export function validImageUrl(value){if(typeof value!=='string'||value.length>30
 export function cleanStyle(input={}){const s={...defaults};if(!input||typeof input!=='object')return s;for(const k of Object.keys(s)){const v=input[k];if(k==='atmosphereName'){if(typeof v==='string'&&v.trim())s[k]=v.trim().slice(0,60)}else if(k==='signatureText'){if(typeof v==='string')s[k]=v.slice(0,80)}else if(k in numeric){const [min,max]=numeric[k];if(Number.isFinite(v))s[k]=Math.max(min,Math.min(max,v))}else if(k in choices){if(choices[k].includes(v))s[k]=v}else if(typeof s[k]==='boolean'){if(typeof v==='boolean')s[k]=v}else if(k==='backgroundImage'){s[k]=validImageUrl(v)}else if(/^#[0-9a-f]{6}$/i.test(v)){s[k]=v}}
 // Older cards stored only the theme name, not their custom paper colors.
 if(input.atmosphereName===undefined)s.atmosphereName=({velvet:'Tinta',nocturne:'Bruma',relic:'Ceniza'})[s.theme];if(input.paperBg===undefined)s.paperBg=palettes[s.theme][0];if(input.textColor===undefined)s.textColor=palettes[s.theme][1];if(input.titleColor===undefined)s.titleColor=s.textColor;if(input.signatureStyle===undefined)s.signatureStyle=input.signature===false?'none':'name';s.signature=s.signatureStyle!=='none';return s}
-export function validate(data){if(!data||![1,2].includes(data.v)||typeof data.markdown!=='string'||data.markdown.length>200000||typeof data.title!=='string'||data.title.length>180)throw Error('Esta carta no tiene un formato válido o es demasiado extensa.');return {v:data.v,title:data.title,markdown:data.markdown,style:cleanStyle(data.style)}}
+
+// Las coordenadas se validan antes de compartirlas o dibujarlas.
+export function cleanPlacement(value){
+ const data={blocks:[],decor:{},stickers:[]};
+ if(!value||typeof value!=='object')return data;
+ if(Array.isArray(value.blocks))for(const b of value.blocks.slice(0,240)){
+  if(!b||!Number.isInteger(b.i)||b.i<0||b.i>1000||!Number.isFinite(b.x)||!Number.isFinite(b.y))continue;
+  data.blocks.push({i:b.i,s:typeof b.s==='string'?b.s.slice(0,124):'',x:Math.max(-1600,Math.min(1600,Math.round(b.x))),y:Math.max(-1600,Math.min(1600,Math.round(b.y)))});
+ }
+ const allowed=['ornament','central','lineLeft','lineRight','final','signature','frameTop','frameRight','frameBottom','frameLeft'];
+ if(value.decor&&typeof value.decor==='object')for(const key of allowed){
+  const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
+  if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))data.decor[key]={x:Math.max(-1600,Math.min(1600,Math.round(point.x))),y:Math.max(-1600,Math.min(1600,Math.round(point.y)))};
+ }
+ return data;
+}
+
+export function validate(data){if(!data||![1,2].includes(data.v)||typeof data.markdown!=='string'||data.markdown.length>200000||typeof data.title!=='string'||data.title.length>180)throw Error('Esta carta no tiene un formato válido o es demasiado extensa.');return {v:data.v,title:data.title,markdown:data.markdown,style:cleanStyle(data.style),layout:cleanPlacement(data.layout)}}
 export function encode(data){return 'c2.'+LZString.compressToEncodedURIComponent(JSON.stringify({...validate(data),v:2}))}
 export function decode(hash){if(hash.length>280000||!/^c[12]\./.test(hash))throw Error('El enlace de esta carta está incompleto o no es válido.');try{const json=LZString.decompressFromEncodedURIComponent(hash.slice(3));if(!json||json.length>260000)throw Error();return validate(JSON.parse(json))}catch{throw Error('No se pudo abrir la carta. Revisa que hayas copiado el enlace completo.')}}

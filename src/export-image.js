@@ -33,7 +33,7 @@
   function hasContent(){
     const editor=$('#editor .tiptap');
     if(!editor)return false;
-    return Boolean(editor.textContent.trim()||editor.querySelector('img,table,hr'));
+    return Boolean(editor.textContent.trim()||editor.querySelector('img,table,hr')||document.querySelector('#edit-paper .free-sticker'));
   }
 
   function timeoutSignal(ms){
@@ -313,6 +313,17 @@
     stage.style.zIndex='-1';
 
     const paper=sourcePaper.cloneNode(true);
+    // La colocación libre de Tiptap se aplica mediante CSS para evitar
+    // que ProseMirror reemplace elementos durante el arrastre. Copiamos
+    // sus transformaciones al clon antes de eliminar los identificadores.
+    const sourceBlocks=[...sourcePaper.querySelectorAll('#editor .tiptap > *')];
+    const copyBlocks=[...paper.querySelectorAll('#editor .tiptap > *')];
+    sourceBlocks.forEach((block,i)=>{
+      const clone=copyBlocks[i];
+      if(!clone)return;
+      const transform=getComputedStyle(block).transform;
+      if(transform&&transform!=='none')clone.style.setProperty('transform',transform);
+    });
     cleanupClone(paper);
     paper.style.width='100%';
     paper.style.maxWidth=`${paperWidth}px`;
