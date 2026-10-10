@@ -266,7 +266,7 @@
     } catch (_) { message.storageMissing = true; }
     finally {
       previewLoading.delete(message.id);
-      if (activePeerId && histories[activePeerId]?.includes(message)) render();
+      if (activePeerId && histories[activePeerId]?.includes(message)) refreshFileContent(message);
     }
   }
 
@@ -316,18 +316,24 @@
     if (!msg) return;
     Object.assign(msg, updates);
     saveHistories();
-    if (activePeerId === peerId) render();
+    if (activePeerId === peerId) patchMessageInView(msg);
   }
   function addMessage(message) {
     const list = chatHistory();
-    if (!list.find((item) => item.id === message.id)) list.push(message);
-    if (list.length > MAX_MESSAGES_PER_CHAT) list.splice(0, list.length - MAX_MESSAGES_PER_CHAT);
+    if (list.some((item) => item.id === message.id)) return;
+    const previous = list[list.length - 1];
+    list.push(message);
+    const trimmed = list.length > MAX_MESSAGES_PER_CHAT;
+    if (trimmed) list.splice(0, list.length - MAX_MESSAGES_PER_CHAT);
     saveHistories();
-    render();
+    // Al llegar un mensaje nuevo, se añade solo la nueva burbuja. Las anteriores
+    // (incluidos los reproductores multimedia) no se recrean ni se desplazan.
+    if (trimmed) render();
+    else appendMessageToView(message, previous);
   }
   function updateMessage(id, updates) {
     const msg = getMessage(id);
-    if (msg) { Object.assign(msg, updates); saveHistories(); render(); }
+    if (msg) { Object.assign(msg, updates); saveHistories(); patchMessageInView(msg); }
   }
   function setChatPartner(id) {
     if (!isFiveDigits(id)) return;
@@ -402,7 +408,89 @@
     bubble.append(wrapper);
     if (message.status !== 'sending' && !url && !message.storageMissing) void loadFilePreview(message);
   }
+  function messageRow(msg) {
+    const row = el('div', `chat-message ${msg.direction === 'out' ? 'outgoing' : 'incoming'}`);
+    row.dataset.messageId = msg.id;
+    const bubble = el('div', 'chat-bubble');
+    if (msg.kind === 'text') bubble.append(el('div', 'chat-text', msg.text));
+    else addFileContent(bubble, msg);
+    const meta = el('div', 'chat-metadata');
+    const clock = el('time', '', fmtTime(msg.time));
+    clock.dateTime = new Date(msg.time).toISOString();
+    meta.append(clock);
+    if (msg.direction === 'out') {
+      const mark = el('span', 'chat-checks');
+      meta.append(mark);
+      setMessageMark(mark, msg.status);
+    }
+    bubble.append(meta);
+    row.append(bubble);
+    return row;
+  }
+  function setMessageMark(mark, status) {
+    const description = status === 'delivered' ? 'Recibido' : status === 'sent' ? 'Enviado' :
+      status === 'failed' ? 'No enviado' : 'Enviando';
+    mark.textContent = status === 'delivered' ? '✓✓' : status === 'sent' ? '✓' :
+      status === 'failed' ? '!' : '○';
+    mark.className = `chat-checks${status === 'delivered' ? ' is-delivered' : ''}${status === 'failed' ? ' is-failed' : ''}`;
+    mark.title = description;
+    mark.setAttribute('aria-label', description);
+  }
+  function rowForMessage(id) {
+    return Array.from(ui.messages.children).find((child) => child.dataset.messageId === id) || null;
+  }
+  function refreshFileContent(message) {
+    const row = rowForMessage(message.id);
+    const bubble = row?.querySelector('.chat-bubble');
+    if (!bubble || message.kind !== 'file') return;
+    const current = bubble.querySelector('.chat-file');
+    // Solo se recrea el adjunto que terminó: no se interrumpen otros videos,
+    // audios ni la posición de desplazamiento de la conversación.
+    const holder = document.createElement('div');
+    addFileContent(holder, message);
+    if (current) current.replaceWith(holder.firstElementChild);
+    else bubble.prepend(holder.firstElementChild);
+  }
+  function patchMessageInView(message) {
+    const row = rowForMessage(message.id);
+    if (!row) return;
+    if (message.direction === 'out') {
+      const mark = row.querySelector('.chat-checks');
+      if (mark) setMessageMark(mark, message.status);
+    }
+    if (message.kind !== 'file') return;
+    const progress = row.querySelector('.chat-file-progress');
+    if (message.status === 'sending') {
+      if (progress) {
+        // El cambio del porcentaje modifica solo este texto, sin reanimar las
+        // burbujas ni forzar el scroll después de cada lote recibido.
+        const nextText = message.progress || 'Transfiriendo archivo…';
+        if (progress.textContent !== nextText) progress.textContent = nextText;
+      } else refreshFileContent(message);
+    } else {
+      if (progress) refreshFileContent(message);
+      else if (message.stored || message.objectUrl || message.storageMissing) {
+        // En cambios posteriores (por ejemplo, IndexedDB listo), se actualiza
+        // únicamente la tarjeta de este archivo.
+        refreshFileContent(message);
+      }
+    }
+  }
+  function nearBottom() {
+    return ui.messages.scrollHeight - ui.messages.scrollTop - ui.messages.clientHeight < 85;
+  }
+  function appendMessageToView(message, previous) {
+    const shouldScroll = message.direction === 'out' || nearBottom();
+    if (ui.empty.parentNode === ui.messages) ui.empty.remove();
+    if (!previous || new Date(previous.time).toDateString() !== new Date(message.time).toDateString()) {
+      ui.messages.append(el('div', 'chat-day-divider', fmtDay(message.time)));
+    }
+    ui.messages.append(messageRow(message));
+    if (shouldScroll) ui.messages.scrollTop = ui.messages.scrollHeight;
+  }
   function render() {
+    const wasNearBottom = nearBottom();
+    const previousScroll = ui.messages.scrollTop;
     ui.messages.replaceChildren();
     const list = chatHistory();
     if (!list.length) {
@@ -417,27 +505,11 @@
         day = date;
         ui.messages.append(el('div', 'chat-day-divider', fmtDay(msg.time)));
       }
-      const row = el('div', `chat-message ${msg.direction === 'out' ? 'outgoing' : 'incoming'}`);
-      const bubble = el('div', 'chat-bubble');
-      if (msg.kind === 'text') bubble.append(el('div', 'chat-text', msg.text));
-      else addFileContent(bubble, msg);
-      const meta = el('div', 'chat-metadata');
-      const clock = el('time', '', fmtTime(msg.time));
-      clock.dateTime = new Date(msg.time).toISOString();
-      meta.append(clock);
-      if (msg.direction === 'out') {
-        const statusText = msg.status === 'delivered' ? 'Recibido' : msg.status === 'sent' ? 'Enviado' : msg.status === 'failed' ? 'No enviado' : 'Enviando';
-        const mark = el('span', `chat-checks${msg.status === 'delivered' ? ' is-delivered' : ''}${msg.status === 'failed' ? ' is-failed' : ''}`,
-          msg.status === 'delivered' ? '✓✓' : msg.status === 'sent' ? '✓' : msg.status === 'failed' ? '!' : '○');
-        mark.title = statusText;
-        mark.setAttribute('aria-label', statusText);
-        meta.append(mark);
-      }
-      bubble.append(meta);
-      row.append(bubble);
-      ui.messages.append(row);
+      ui.messages.append(messageRow(msg));
     }
-    ui.messages.scrollTop = ui.messages.scrollHeight;
+    // Solo al reconstruir una conversación o cargar el historial se reposiciona.
+    if (wasNearBottom) ui.messages.scrollTop = ui.messages.scrollHeight;
+    else ui.messages.scrollTop = previousScroll;
   }
   function online() { return !!(connection && connection.open); }
   function safeSend(payload) {
@@ -541,6 +613,12 @@
         const from = (i - transfer.next) * CHUNK_BYTES;
         if (!safeSend({ kind: 'file-chunk', id, index: i, data: block.slice(from, from + CHUNK_BYTES) })) {
           throw new Error('No se pudo enviar un bloque');
+        }
+        // Cede el hilo cada 256 KB para que el compositor y los mensajes de texto
+        // sigan respondiendo mientras se transfieren archivos voluminosos.
+        if ((i - transfer.next + 1) % 16 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          if (connection !== transfer.connection || !online()) throw new Error('Desconectado');
         }
       }
       transfer.next = end;
