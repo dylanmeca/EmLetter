@@ -8,8 +8,6 @@ pdf_reader_page: true
 <main class="pdf-reader-page" id="contenido">
   <section class="pdf-reader-intro">
     <p class="eyebrow">EMLETTER · UN ESPACIO PARA LEER</p>
-    <h1>Cada página, a tu <em>ritmo.</em></h1>
-    <p>Abre un PDF y léelo con comodidad, sin salir de EmLetter.</p>
   </section>
 
   <section class="pdf-reader-card" aria-label="Lector de documentos PDF">
@@ -58,8 +56,12 @@ pdf_reader_page: true
             <option value="width">Ajustar al ancho</option>
             <option value="page">Ver página completa</option>
           </select>
+          <label class="pdf-reader-range-label" for="pdf-brightness">Brillo <output id="pdf-brightness-value" for="pdf-brightness">100%</output></label>
+          <input type="range" id="pdf-brightness" min="50" max="150" step="5" value="100" aria-label="Brillo del documento">
+          <label class="pdf-reader-range-label" for="pdf-blue-light">Filtro de luz azul <output id="pdf-blue-light-value" for="pdf-blue-light">0%</output></label>
+          <input type="range" id="pdf-blue-light" min="0" max="100" step="5" value="0" aria-label="Intensidad del filtro de luz azul">
           <button type="button" id="pdf-rotate-mobile" class="pdf-reader-rotate-mobile" disabled>↻ Girar página</button>
-          <p>La apariencia oscura modifica la visualización, no el archivo original.</p>
+          <p>Estos ajustes cambian solo la visualización, no el archivo original.</p>
         </div>
       </details>
     </div>
