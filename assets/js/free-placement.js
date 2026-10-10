@@ -260,10 +260,42 @@
   const emojiGrid=contextMenu.querySelector('.emletter-emoji-grid');
   const emojiCategories=contextMenu.querySelector('.emletter-emoji-categories');
   const emojiData=Array.isArray(window.EmLetterEmojis)?window.EmLetterEmojis:[];
-  const emojiGroups=[['8','✦','Favoritos'],['0','😊','Caras'],['1','🫶','Personas'],['2','🌹','Naturaleza'],['3','🍓','Comida'],['4','🌎','Viajes'],['5','🎨','Actividades'],['6','💟','Símbolos'],['7','🏳️','Banderas']];
-  const esAlias={amor:'heart',corazon:'heart',corazón:'heart',sonrisa:'smil',risa:'laugh',triste:'sad',llorar:'cry',gato:'cat',perro:'dog',flor:'flower',rosa:'rose',luna:'moon',sol:'sun',murcielago:'bat',murciélago:'bat',fantasma:'ghost',mano:'hand',beso:'kiss',fuego:'fire',estrella:'star',bandera:'flag',comida:'food',fiesta:'party',musica:'music',música:'music',familia:'family',ojos:'eyes',cara:'face',abrazo:'hug',libro:'book'};
-  let emojiGroup='8',emojiFilter=[],emojiCount=0;
-  const emojiNormalize=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const emojiGroups=[['','🌐','Todos'],['8','✦','Favoritos'],['0','😊','Caras'],['1','🫶','Personas'],['2','🌹','Naturaleza'],['3','🍓','Comida'],['4','🌎','Viajes'],['5','🎨','Actividades'],['6','💟','Objetos y símbolos'],['7','🏳️','Banderas']];
+  // Los nombres originales de Unicode están en inglés; admitimos también
+  // búsquedas en español, con acentos, sin depender de servicios en línea.
+  const esAlias={
+    amor:['heart','love','kiss'],corazon:['heart'],corazones:['heart'],querer:['love','heart'],beso:['kiss'],besos:['kiss'],
+    feliz:['smil','happy','joy','grin'],felicidad:['joy','happy'],alegria:['joy','smil'],risa:['laugh','joy','grin'],
+    sonrisa:['smil','grin'],sonreir:['smil','grin'],cara:['face'],caras:['face'],carita:['face','smil'],
+    triste:['sad','cry','frown'],tristeza:['sad','cry','frown'],llorar:['cry','sob'],llanto:['cry','sob'],
+    asombro:['surpris','astonish'],enojado:['angry','rage'],miedo:['fear','scared'],
+    persona:['person','man','woman'],personas:['person','people','man','woman'],hombre:['man'],mujer:['woman'],
+    mano:['hand'],manos:['hand'],abrazo:['hug'],familia:['family'],piel:['skin'],
+    gato:['cat'],perro:['dog'],animal:['animal','cat','dog','bird','bear','fish','horse','whale'],
+    animales:['animal','cat','dog','bird','bear','fish','horse','whale'],
+    pajaro:['bird'],perrito:['dog'],gatito:['cat'],flor:['flower','blossom','rose'],flores:['flower','blossom','rose'],
+    rosa:['rose'],naturaleza:['flower','tree','animal','plant','leaf'],arbol:['tree'],
+    luna:['moon'],sol:['sun'],estrella:['star'],murcielago:['bat'],fantasma:['ghost'],
+    comida:['food','bread','pizza','rice','fruit','vegetable','meal'],fruta:['fruit','apple','pear','grape','banana'],
+    pizza:['pizza'],pastel:['cake'],bebida:['drink','glass','cup','coffee','wine'],cafe:['coffee'],
+    musica:['music','note','musical','instrument'],bailar:['dance','dancer'],baile:['dance','dancer'],
+    fiesta:['party','celebrat','confetti'],deporte:['sport','ball','game'],juego:['game'],
+    viajar:['travel','airplane','car','train'],viaje:['travel','airplane','car','train'],coche:['car','automobile'],
+    avion:['airplane'],bandera:['flag'],banderas:['flag'],espana:['spain'],mexico:['mexico'],
+    fuego:['fire'],agua:['water','drop','wave'],mar:['ocean','sea','wave'],
+    libro:['book'],escribir:['writing','pencil','pen'],lapiz:['pencil'],telefono:['phone'],
+    ojo:['eye'],ojos:['eye'],regalo:['gift'],dinero:['money','cash','coin'],
+    negro:['black'],blanco:['white'],rojo:['red'],azul:['blue'],verde:['green'],morado:['purple'],
+    oscuro:['dark'],claro:['light'],dedo:['finger'],dedos:['finger'],
+    orca:['orca'],tesoro:['treasure'],trombon:['trombone']
+  };
+  const emojiNormalize=text=>String(text??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const emojiSearchIndex=emojiData.map(([glyph,name,group])=>({
+    glyph,name,group:String(group),normalized:emojiNormalize(name),
+  }));
+  const emojiGroupWords={'0':'cara face smile','1':'persona person hand skin people','2':'naturaleza nature animal plant flower',
+    '3':'comida food drink','4':'viaje travel place','5':'deporte sport activity music','6':'simbolo symbol object','7':'bandera flag'};
+  let emojiGroup='',emojiFilter=[],emojiCount=0;
   for(const [id,glyph,name] of emojiGroups){
     const btn=document.createElement('button');btn.type='button';btn.textContent=glyph;btn.title=name;btn.setAttribute('aria-label',name);btn.dataset.group=id;emojiCategories.append(btn);
   }
@@ -284,19 +316,31 @@
     emojiGrid.append(fragment);
   }
   function filterEmojis(){
-    const text=emojiNormalize(emojiSearch.value.trim());
-    const term=emojiNormalize(esAlias[text]||text);
-    emojiFilter=emojiData.filter(([glyph,name,group])=>(!text||emojiNormalize(name).includes(term)||glyph.includes(text))&&(!emojiGroup||group===emojiGroup||text));
+    const query=emojiNormalize(emojiSearch.value).replace(/\s+/g,' ');
+    const tokens=query.split(' ').filter(Boolean);
+    emojiFilter=emojiSearchIndex.filter(entry=>{
+      if(emojiGroup&&entry.group!==emojiGroup)return false;
+      if(!tokens.length)return true;
+      const searchText=entry.normalized+' '+(emojiGroupWords[entry.group]||'');
+      return tokens.every(token=>{
+        const options=esAlias[token]||[token];
+        return entry.glyph.includes(token)||options.some(value=>searchText.includes(value));
+      });
+    }).map(({glyph,name})=>[glyph,name]);
     emojiCount=0;emojiGrid.replaceChildren();emojiGrid.scrollTop=0;
-    if(!emojiFilter.length){const p=document.createElement('p');p.className='emletter-emoji-empty';p.textContent='No se encontraron emojis.';emojiGrid.append(p)}
-    else appendEmojis();
+    if(!emojiFilter.length){
+      const note=document.createElement('p');note.className='emletter-emoji-empty';
+      note.textContent=emojiData.length?'No hay resultados para esa búsqueda. Prueba otra palabra o la categoría Todos.':'El catálogo de emojis no se pudo cargar. Actualiza la página.';
+      emojiGrid.append(note);
+    }else appendEmojis();
+    emojiPanel.querySelector('.emletter-emoji-foot').textContent=emojiFilter.length.toLocaleString('es')+' emojis disponibles · Toca uno para insertarlo.';
     for(const b of emojiCategories.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.group===emojiGroup));
   }
   function setEmojiPanel(visible){
     emojiPanel.hidden=!visible;
     contextMenu.querySelector('.emletter-context-actions').hidden=visible;
     contextMenu.querySelector('[data-action="emojis"]').setAttribute('aria-expanded',String(visible));
-    if(visible){emojiGroup='8';emojiSearch.value='';filterEmojis();requestAnimationFrame(()=>{fitContextMenu();emojiSearch.focus()})}
+    if(visible){emojiGroup='';emojiSearch.value='';filterEmojis();requestAnimationFrame(()=>{fitContextMenu();emojiSearch.focus()})}
   }
   emojiCategories.addEventListener('click',ev=>{
     const b=ev.target.closest('button[data-group]');if(!b)return;
