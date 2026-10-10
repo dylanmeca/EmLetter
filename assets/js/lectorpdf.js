@@ -15,6 +15,9 @@
     rotate: $("pdf-rotate"), rotateMobile: $("pdf-rotate-mobile"), theme: $("pdf-theme"), fit: $("pdf-fit"), settings: $("pdf-preferences"),
     brightness: $("pdf-brightness"), brightnessValue: $("pdf-brightness-value"),
     blueLight: $("pdf-blue-light"), blueLightValue: $("pdf-blue-light-value"),
+    card: document.querySelector(".pdf-reader-card"),
+    fullscreen: $("pdf-fullscreen-toggle"), fullscreenLabel: $("pdf-fullscreen-label"),
+    fullscreenIcon: $("pdf-fullscreen-icon"),
     stage: $("pdf-reader-stage"), empty: $("pdf-empty"), scroll: $("pdf-scroll"),
     sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"),
     annotations: $("pdf-annotation-layer"), loading: $("pdf-loading"),
@@ -55,6 +58,7 @@
     lib: null, libPromise: null, pdf: null, page: 1, total: 0,
     zoom: 1, rotation: 0, fileName: "", renderTask: null, textTask: null,
     revision: 0, loadingRevision: 0, errorTimer: null, resizeTimer: null, dragDepth: 0,
+    fallbackFullscreen: false, previousBodyOverflow: "",
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -117,6 +121,84 @@
     elements.text.replaceChildren();
     elements.annotations.replaceChildren();
   }
+
+  // Pantalla completa nativa cuando está disponible. Safari en iPhone y algunos
+  // navegadores pueden requerir un modo inmersivo dentro de la ventana.
+  function fullscreenActive() {
+    return document.fullscreenElement === elements.card || state.fallbackFullscreen;
+  }
+
+  function syncFullscreenControl() {
+    const active = fullscreenActive();
+    elements.fullscreen.setAttribute("aria-pressed", String(active));
+    elements.fullscreen.setAttribute("aria-label", active ? "Salir de pantalla completa" : "Pantalla completa");
+    elements.fullscreen.title = active ? "Salir de pantalla completa" : "Pantalla completa";
+    elements.fullscreenLabel.textContent = active ? "Salir de pantalla completa" : "Pantalla completa";
+    elements.fullscreenIcon.textContent = active ? "↙" : "⛶";
+  }
+
+  function refreshViewport() {
+    clearTimeout(state.resizeTimer);
+    state.resizeTimer = setTimeout(() => {
+      if (state.pdf) render({ preserveCenter: true });
+    }, 120);
+  }
+
+  function enableFallbackFullscreen() {
+    if (state.fallbackFullscreen) return;
+    state.previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    state.fallbackFullscreen = true;
+    elements.card.classList.add("pdf-reader-fullscreen-fallback");
+    syncFullscreenControl();
+    refreshViewport();
+  }
+
+  function disableFallbackFullscreen() {
+    if (!state.fallbackFullscreen) return;
+    state.fallbackFullscreen = false;
+    elements.card.classList.remove("pdf-reader-fullscreen-fallback");
+    document.body.style.overflow = state.previousBodyOverflow;
+    syncFullscreenControl();
+    refreshViewport();
+  }
+
+  async function exitReaderFullscreen() {
+    if (state.fallbackFullscreen) {
+      disableFallbackFullscreen();
+    } else if (document.fullscreenElement === elements.card && document.exitFullscreen) {
+      try { await document.exitFullscreen(); }
+      catch (error) { console.warn("EmLetter: no se pudo salir de pantalla completa.", error); }
+    }
+    syncFullscreenControl();
+  }
+
+  async function toggleReaderFullscreen() {
+    if (fullscreenActive()) {
+      await exitReaderFullscreen();
+      return;
+    }
+    elements.settings.open = false;
+    if (typeof elements.card.requestFullscreen === "function") {
+      try {
+        // Llamar directamente desde el evento de clic mantiene la activación del usuario.
+        await elements.card.requestFullscreen();
+        syncFullscreenControl();
+        refreshViewport();
+        return;
+      } catch (error) {
+        console.info("EmLetter: pantalla completa nativa no disponible; usando vista inmersiva.", error);
+      }
+    }
+    enableFallbackFullscreen();
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    syncFullscreenControl();
+    refreshViewport();
+  });
+  elements.fullscreen.addEventListener("click", toggleReaderFullscreen);
+  syncFullscreenControl();
 
   async function discardDocument() {
     stopRender();
@@ -351,6 +433,7 @@
   }
 
   async function closeFile() {
+    await exitReaderFullscreen();
     ++state.loadingRevision;
     await discardDocument();
     hideLoading();
@@ -415,7 +498,14 @@
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") { elements.settings.open = false; return; }
+    if (event.key === "Escape") {
+      if (fullscreenActive()) {
+        event.preventDefault();
+        exitReaderFullscreen();
+      }
+      elements.settings.open = false;
+      return;
+    }
     if (!state.pdf || event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.("input,textarea,select,button,summary,[contenteditable]")) return;
     if (["ArrowRight", "PageDown"].includes(event.key)) { event.preventDefault(); changePage(state.page + 1); }
@@ -428,10 +518,7 @@
   document.addEventListener("pointerdown", (event) => {
     if (!elements.settings.contains(event.target)) elements.settings.open = false;
   });
-  window.addEventListener("resize", () => {
-    clearTimeout(state.resizeTimer);
-    state.resizeTimer = setTimeout(() => { if (state.pdf) render({ preserveCenter: true }); }, 170);
-  });
+  window.addEventListener("resize", refreshViewport);
 
   elements.stage.addEventListener("dragenter", (event) => {
     if (!event.dataTransfer?.types.includes("Files")) return;
