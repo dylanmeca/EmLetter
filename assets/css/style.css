@@ -1018,3 +1018,19 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
  .gothic-moods-colors{gap:10px}
 }
 @media(max-height:660px){.gothic-palette-scroll{padding-top:10px}.gothic-wheel-wrap{width:min(215px,53vw);height:min(215px,53vw)}.gothic-moods{margin-top:8px}.gothic-moods-title{margin-bottom:7px}}
+
+/* Colocación libre tipo lienzo: visible sólo cuando el elemento se mueve. */
+.placement-status{margin:10px 0 0;padding:8px 12px;border:1px solid #354662;border-radius:5px;background:#101a2c;color:#b8c8de;font-size:12px;line-height:1.5}
+.placing-element #edit-paper{cursor:crosshair}
+#edit-paper .free-moving{position:relative!important;z-index:9!important;outline:1px dashed #a6b6e9!important;outline-offset:6px;cursor:move;user-select:none;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66)}
+#edit-paper .free-placed{position:relative;will-change:transform}
+#edit-paper .emoji-frame .frame-side{pointer-events:auto}
+#edit-paper .ornament-symbol,#edit-paper .ornament-line,#edit-paper .end-ornament,#edit-paper .letter-signature{cursor:context-menu}
+@media (max-width:760px){.placement-status{font-size:11px;margin:8px 0}.placing-element #edit-paper{touch-action:none}}
+
+/* Capas editables para texto y emoji libres, incluidas en los enlaces y la exportación. */
+.paper>.free-sticker-layer{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:visible}
+.paper .free-sticker{display:block;position:absolute;left:0;top:0;min-width:24px;max-width:min(80%,600px);padding:3px 5px;font:inherit;color:var(--letter-text);background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.4;pointer-events:auto;border:1px solid transparent;border-radius:3px}
+#edit-paper .free-sticker:focus{outline:1px dashed var(--accent);background:#1c273c77}
+#read-paper .free-sticker{user-select:text;pointer-events:none}
+#edit-paper .free-sticker.free-moving{pointer-events:none;z-index:10}
