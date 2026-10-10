@@ -9,7 +9,6 @@
   const clamp=n=>Math.max(-MAX,Math.min(MAX,Math.round(n)));
   const zero=()=>({blocks:[],decor:{},stickers:[]});
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
-  let clipboardItem=null,menuTarget=null,menuPoint=null,contextTimer=null,emojiSelection=null;
   let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
   const isFloating=b=>Boolean(b&&typeof b.s==='string'&&b.s.startsWith('!'));
   const rawSignature=b=>isFloating(b)?b.s.slice(1):b?.s;
@@ -342,154 +341,15 @@
     else transform(current.element,current.originX,current.originY);
     apply(editingPaper);
   }
+  // Botones clásicos del editor. No dependen de un menú contextual.
   const editor=()=>root?.editor;
-  const contextMenu=document.createElement('div');
-  contextMenu.className='emletter-context-menu';contextMenu.hidden=true;
-  contextMenu.setAttribute('role','menu');contextMenu.setAttribute('aria-label','Acciones del elemento');
-  contextMenu.innerHTML=`<div class="emletter-context-actions"><button type="button" data-action="duplicate" role="menuitem">Duplicar</button><button type="button" data-action="copy" role="menuitem">Copiar</button><button type="button" data-action="paste" role="menuitem">Pegar</button><button type="button" data-action="emojis" class="emletter-emoji-switch" role="menuitem" aria-expanded="false">☺ Emojis</button></div><section class="emletter-emoji-panel" hidden aria-label="Selector de emojis"><div class="emletter-emoji-head"><strong>Emojis</strong><button class="emletter-emoji-close" type="button" aria-label="Volver al menú">×</button></div><input class="emletter-emoji-search" type="search" placeholder="Buscar emoji…" aria-label="Buscar emoji"><div class="emletter-emoji-categories" role="group" aria-label="Categorías"></div><div class="emletter-emoji-grid" role="group" aria-label="Emojis disponibles"></div><div class="emletter-emoji-foot">Selecciona un emoji para insertarlo en tu texto.</div></section>`;
-  document.body.append(contextMenu);
-  function hideMenu(){clearTimeout(contextTimer);contextMenu.hidden=true;menuTarget=null;setEmojiPanel(false)}
-  function menuAt(target,ev){
-    const clientX=ev.clientX??ev.x??8,clientY=ev.clientY??ev.y??8;
-    menuTarget=target;menuPoint={x:clientX,y:clientY};
-    const ed=editor();
-    if(ed){
-      const selection=ed.state.selection;
-      // El derecho no debe sustituir la posición del cursor con las coordenadas del menú.
-      emojiSelection={from:selection.from,to:selection.to};
-      const native=getSelection();
-      if(native?.anchorNode&&root?.contains(native.anchorNode)){
-        try{
-          const pos=ed.view.posAtDOM(native.anchorNode,native.anchorOffset);
-          if(Number.isInteger(pos))emojiSelection={from:pos,to:native.isCollapsed?pos:selection.to};
-        }catch{}
-      }
-    }
-    contextMenu.querySelector('[data-action="duplicate"]').disabled=!target;
-    contextMenu.querySelector('[data-action="copy"]').disabled=!target;
-    contextMenu.querySelector('[data-action="paste"]').disabled=!clipboardItem;
-    setEmojiPanel(false);
-    contextMenu.hidden=false;
-    const w=contextMenu.offsetWidth,h=contextMenu.offsetHeight;
-    contextMenu.style.left=Math.max(8,Math.min(innerWidth-w-8,clientX))+'px';
-    contextMenu.style.top=Math.max(8,Math.min(innerHeight-h-8,clientY))+'px';
+  function createFree(text){
+    if(active)finish(true);
+    const sticker=addSticker(text);
+    if(sticker)selectedFree={kind:'sticker',key:sticker.id};
   }
-  // Catálogo sin dependencias externas; se muestra por lotes para mantener la fluidez.
-  const emojiPanel=contextMenu.querySelector('.emletter-emoji-panel');
-  const emojiSearch=contextMenu.querySelector('.emletter-emoji-search');
-  const emojiGrid=contextMenu.querySelector('.emletter-emoji-grid');
-  const emojiCategories=contextMenu.querySelector('.emletter-emoji-categories');
-  const emojiData=Array.isArray(window.EmLetterEmojis)?window.EmLetterEmojis:[];
-  const emojiGroups=[['','🌐','Todos'],['8','✦','Favoritos'],['0','😊','Caras'],['1','🫶','Personas'],['2','🌹','Naturaleza'],['3','🍓','Comida'],['4','🌎','Viajes'],['5','🎨','Actividades'],['6','💟','Objetos y símbolos'],['7','🏳️','Banderas']];
-  // Los nombres originales de Unicode están en inglés; admitimos también
-  // búsquedas en español, con acentos, sin depender de servicios en línea.
-  const esAlias={
-    amor:['heart','love','kiss'],corazon:['heart'],corazones:['heart'],querer:['love','heart'],beso:['kiss'],besos:['kiss'],
-    feliz:['smil','happy','joy','grin'],felicidad:['joy','happy'],alegria:['joy','smil'],risa:['laugh','joy','grin'],
-    sonrisa:['smil','grin'],sonreir:['smil','grin'],cara:['face'],caras:['face'],carita:['face','smil'],
-    triste:['sad','cry','frown'],tristeza:['sad','cry','frown'],llorar:['cry','sob'],llanto:['cry','sob'],
-    asombro:['surpris','astonish'],enojado:['angry','rage'],miedo:['fear','scared'],
-    persona:['person','man','woman'],personas:['person','people','man','woman'],hombre:['man'],mujer:['woman'],
-    mano:['hand'],manos:['hand'],abrazo:['hug'],familia:['family'],piel:['skin'],
-    gato:['cat'],perro:['dog'],animal:['animal','cat','dog','bird','bear','fish','horse','whale'],
-    animales:['animal','cat','dog','bird','bear','fish','horse','whale'],
-    pajaro:['bird'],perrito:['dog'],gatito:['cat'],flor:['flower','blossom','rose'],flores:['flower','blossom','rose'],
-    rosa:['rose'],naturaleza:['flower','tree','animal','plant','leaf'],arbol:['tree'],
-    luna:['moon'],sol:['sun'],estrella:['star'],murcielago:['bat'],fantasma:['ghost'],
-    comida:['food','bread','pizza','rice','fruit','vegetable','meal'],fruta:['fruit','apple','pear','grape','banana'],
-    pizza:['pizza'],pastel:['cake'],bebida:['drink','glass','cup','coffee','wine'],cafe:['coffee'],
-    musica:['music','note','musical','instrument'],bailar:['dance','dancer'],baile:['dance','dancer'],
-    fiesta:['party','celebrat','confetti'],deporte:['sport','ball','game'],juego:['game'],
-    viajar:['travel','airplane','car','train'],viaje:['travel','airplane','car','train'],coche:['car','automobile'],
-    avion:['airplane'],bandera:['flag'],banderas:['flag'],espana:['spain'],mexico:['mexico'],
-    fuego:['fire'],agua:['water','drop','wave'],mar:['ocean','sea','wave'],
-    libro:['book'],escribir:['writing','pencil','pen'],lapiz:['pencil'],telefono:['phone'],
-    ojo:['eye'],ojos:['eye'],regalo:['gift'],dinero:['money','cash','coin'],
-    negro:['black'],blanco:['white'],rojo:['red'],azul:['blue'],verde:['green'],morado:['purple'],
-    oscuro:['dark'],claro:['light'],dedo:['finger'],dedos:['finger'],
-    orca:['orca'],tesoro:['treasure'],trombon:['trombone']
-  };
-  const emojiNormalize=text=>String(text??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-  const emojiSearchIndex=emojiData.map(([glyph,name,group])=>({
-    glyph,name,group:String(group),normalized:emojiNormalize(name),
-  }));
-  const emojiGroupWords={'0':'cara face smile','1':'persona person hand skin people','2':'naturaleza nature animal plant flower',
-    '3':'comida food drink','4':'viaje travel place','5':'deporte sport activity music','6':'simbolo symbol object','7':'bandera flag'};
-  let emojiGroup='',emojiFilter=[],emojiCount=0;
-  for(const [id,glyph,name] of emojiGroups){
-    const btn=document.createElement('button');btn.type='button';btn.textContent=glyph;btn.title=name;btn.setAttribute('aria-label',name);btn.dataset.group=id;emojiCategories.append(btn);
-  }
-  function fitContextMenu(){
-    const w=contextMenu.offsetWidth,h=contextMenu.offsetHeight;
-    const x=menuPoint?.x??8,y=menuPoint?.y??8;
-    contextMenu.style.left=Math.max(8,Math.min(innerWidth-w-8,x))+'px';
-    contextMenu.style.top=Math.max(8,Math.min(innerHeight-h-8,y))+'px';
-  }
-  function appendEmojis(){
-    if(emojiCount>=emojiFilter.length)return;
-    const fragment=document.createDocumentFragment();
-    for(const [glyph,name] of emojiFilter.slice(emojiCount,emojiCount+112)){
-      const btn=document.createElement('button');btn.type='button';btn.textContent=glyph;btn.dataset.emoji=glyph;
-      btn.title=name;btn.setAttribute('aria-label',name);fragment.append(btn);
-    }
-    emojiCount=Math.min(emojiCount+112,emojiFilter.length);
-    emojiGrid.append(fragment);
-  }
-  function filterEmojis(){
-    const query=emojiNormalize(emojiSearch.value).replace(/\s+/g,' ');
-    const tokens=query.split(' ').filter(Boolean);
-    emojiFilter=emojiSearchIndex.filter(entry=>{
-      if(emojiGroup&&entry.group!==emojiGroup)return false;
-      if(!tokens.length)return true;
-      const searchText=entry.normalized+' '+(emojiGroupWords[entry.group]||'');
-      return tokens.every(token=>{
-        const options=esAlias[token]||[token];
-        return entry.glyph.includes(token)||options.some(value=>searchText.includes(value));
-      });
-    }).map(({glyph,name})=>[glyph,name]);
-    emojiCount=0;emojiGrid.replaceChildren();emojiGrid.scrollTop=0;
-    if(!emojiFilter.length){
-      const note=document.createElement('p');note.className='emletter-emoji-empty';
-      note.textContent=emojiData.length?'No hay resultados para esa búsqueda. Prueba otra palabra o la categoría Todos.':'El catálogo de emojis no se pudo cargar. Actualiza la página.';
-      emojiGrid.append(note);
-    }else appendEmojis();
-    emojiPanel.querySelector('.emletter-emoji-foot').textContent=emojiFilter.length.toLocaleString('es')+' emojis disponibles · Toca uno para insertarlo.';
-    for(const b of emojiCategories.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.group===emojiGroup));
-  }
-  function setEmojiPanel(visible){
-    emojiPanel.hidden=!visible;
-    contextMenu.querySelector('.emletter-context-actions').hidden=visible;
-    contextMenu.querySelector('[data-action="emojis"]').setAttribute('aria-expanded',String(visible));
-    if(visible){emojiGroup='';emojiSearch.value='';filterEmojis();requestAnimationFrame(()=>{fitContextMenu();emojiSearch.focus()})}
-  }
-  emojiCategories.addEventListener('click',ev=>{
-    const b=ev.target.closest('button[data-group]');if(!b)return;
-    emojiGroup=b.dataset.group;emojiSearch.value='';filterEmojis();
-  });
-  emojiSearch.addEventListener('input',()=>{emojiGroup='';filterEmojis()});
-  emojiGrid.addEventListener('scroll',()=>{if(emojiGrid.scrollTop+emojiGrid.clientHeight>=emojiGrid.scrollHeight-75)appendEmojis()},{passive:true});
-  emojiPanel.querySelector('.emletter-emoji-close').addEventListener('click',()=>{setEmojiPanel(false);fitContextMenu()});
-  emojiGrid.addEventListener('click',ev=>{
-    const b=ev.target.closest('button[data-emoji]');if(!b)return;
-    const glyph=b.dataset.emoji,target=menuTarget;
-    if(target?.kind==='sticker'){
-      const sticker=layout.stickers.find(s=>s.id===target.key);
-      if(sticker){sticker.text=(sticker.text+glyph).slice(0,2000);renderStickers(editingPaper);changed()}
-    }else{
-      const ed=editor();if(ed){
-        const max=ed.state.doc.content.size;
-        let from=Math.max(0,Math.min(max,emojiSelection?.from??ed.state.selection.from));
-        let to=Math.max(from,Math.min(max,emojiSelection?.to??from));
-        // Inserta en el texto del cursor; no en el buscador ni en los botones del menú.
-        if(!ed.state.doc.resolve(from).parent.inlineContent){
-          const current=ed.state.selection.$from;
-          from=current.parent.inlineContent?current.pos:Math.max(1,max-1);to=from;
-        }
-        ed.chain().focus().insertContentAt({from,to},glyph).run();
-      }
-    }
-    hideMenu();
-  });
+  document.getElementById('add-floating-text')?.addEventListener('click',()=>createFree('Escribe aquí'));
+  document.getElementById('add-floating-emoji')?.addEventListener('click',()=>createFree('🖤'));
   const pointOnPaper=point=>{
     const r=editingPaper.getBoundingClientRect();
     return {x:clamp(point.x-r.left),y:clamp(point.y-r.top)};
@@ -503,79 +363,6 @@
     });
     return result;
   }
-  function clipFrom(item){
-    if(!item)return null;
-    if(item.kind==='sticker'){
-      const st=layout.stickers.find(s=>s.id===item.key);
-      return st?{type:'sticker',text:st.text,style:{...st.style},source:positionFor(item)}:null;
-    }
-    if(item.kind==='decor'){
-      const text=captureVisual(item.key);
-      return text?{type:'sticker',text,style:{},source:positionFor(item)}:null;
-    }
-    const details=nodeAtElement(item.element);
-    if(!details)return null;
-    return {type:'block',json:details.node.toJSON(),source:positionFor(item),index:children(editingPaper).indexOf(item.element)};
-  }
-  function selectionClip(item,selection){
-    if(item?.kind!=='block'||!selection||selection.isCollapsed||!root?.contains(selection.anchorNode))return null;
-    const ed=editor();if(!ed)return null;
-    const {from,to}=ed.state.selection;
-    if(from===to)return null;
-    // Si la selección contiene el bloque completo, se copia como bloque y
-    // conserva su título, alineación, atributos y todas las marcas.
-    const nodeInfo=nodeAtElement(item.element);
-    if(nodeInfo&&from<=nodeInfo.pos+1&&to>=nodeInfo.pos+1+nodeInfo.node.content.size)return null;
-    const slice=ed.state.doc.slice(from,to);
-    const content=slice.content.toJSON();
-    if(!content?.length)return null;
-    // Una selección en mitad del párrafo conserva sus marcas, colores y tipografías.
-    const isInline=content.every(n=>['text','hardBreak'].includes(n.type));
-    return {type:'block',json:isInline?{type:'paragraph',attrs:{...nodeAtElement(item.element)?.node.attrs},content}:content,source:positionFor(item),index:children(editingPaper).indexOf(item.element)};
-  }
-  function pasteClip(clip,pt){
-    if(!clip)return false;
-    if(clip.type==='block'){
-      const ed=editor();if(!ed)return false;
-      const doc=ed.state.doc;
-      const json=structuredClone(clip.json);
-      const count=Array.isArray(json)?json.length:1;
-      const before=children(editingPaper);
-      const srcIndex=Math.max(0,Math.min(before.length-1,clip.index??0));
-      // Insertar detrás del original, respetando también el último bloque.
-      const insertIndex=Math.min(srcIndex+1,before.length);
-      let insertPos=0;
-      for(let i=0;i<insertIndex;i++)insertPos+=doc.child(i).nodeSize;
-      if(!ed.commands.insertContentAt(insertPos,json,{updateSelection:false}))return false;
-      for(const block of layout.blocks)if(block.i>=insertIndex)block.i+=count;
-      const nodes=children(editingPaper);
-      const shift=clip.source||{x:0,y:0};
-      for(let i=insertIndex;i<Math.min(nodes.length,insertIndex+count);i++){
-        const n=nodes[i];if(!n||!eligible(n))continue;
-        layout.blocks.push({i,s:nextSignature(n,isFloating(shift)),x:clamp(shift.x+24),y:clamp(shift.y+24)});
-      }
-      apply(editingPaper);changed();return true;
-    }
-    if(clip.type==='sticker'){
-      const pos=pointOnPaper(pt);
-      const original=clip.source||{x:0,y:0};
-      return !!addSticker(clip.text,{x:pt?.usePosition?clamp(original.x+24):pos.x,y:pt?.usePosition?clamp(original.y+24):pos.y,style:clip.style,focus:false});
-    }
-    return false;
-  }
-  contextMenu.addEventListener('click',ev=>{
-    const button=ev.target.closest('button[data-action]');if(!button||button.disabled)return;
-    const action=button.dataset.action,target=menuTarget,point=menuPoint;
-    if(action==='emojis'){setEmojiPanel(true);return}
-    if(action==='copy'||action==='duplicate'){
-      const selection=getSelection();
-      clipboardItem=action==='duplicate'?clipFrom(target):(selectionClip(target,selection)||clipFrom(target));
-      if(action==='copy'&&clipboardItem?.type==='sticker'&&!getVisual(clipboardItem.text))navigator.clipboard?.writeText(clipboardItem.text).catch(()=>{});
-    }
-    const clip=action==='paste'?clipboardItem:action==='duplicate'?clipboardItem:null;
-    hideMenu();
-    if(clip)pasteClip(clip,{x:point.x+24,y:point.y+24,usePosition:action==='duplicate'});
-  });
   // Al dar formato a un bloque libre sin selección explícita, se aplica al
   // bloque entero y no al texto que estuviera seleccionado anteriormente.
   function selectFreeBlockRange(){
@@ -634,8 +421,6 @@
     else if(!active)selectedFree=null;
   });
   if(toolbar){toolbar.addEventListener('pointerdown',()=>{if(active)finish(true)},true)}
-  document.addEventListener('pointerdown',ev=>{if(!contextMenu.hidden&&!contextMenu.contains(ev.target))hideMenu()},true);
-  document.addEventListener('scroll',()=>{if(!contextMenu.hidden)hideMenu()},true);
   // La selección nativa no siempre selecciona emoji (en especial ZWJ y modificadores).
   // Se identifica el grafema en la posición real del clic, no una palabra vecina.
   function emojiAtPoint(block,ed,x,y){
@@ -690,23 +475,19 @@
     // El bloque sigue siendo editable con todos sus estilos y fuentes.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
+  // El doble clic DERECHO activa o fija el elemento, sin abrir ningún menú.
   editingPaper.addEventListener('contextmenu',event=>{
-    const item=getTarget(event.target);
-    if(!item&&!active&&!clipboardItem)return;
+    // No abrir menús al pulsar una vez (ni el del navegador ni el anterior).
+    // Un doble clic derecho sigue activando o fijando la colocación libre.
     event.preventDefault();
+    const item=getTarget(event.target);
     const now=performance.now();
     const dbl=lastRight&&now-lastRight.time<540&&Math.hypot(lastRight.x-event.clientX,lastRight.y-event.clientY)<28;
     lastRight={time:now,x:event.clientX,y:event.clientY};
-    clearTimeout(contextTimer);
-    if(dbl){
-      lastRight=null;hideMenu();
-      if(active){finish(true);return}
-      if(item)begin(item,event);
-      return;
-    }
-    if(active)return;
-    const point={x:event.clientX,y:event.clientY};
-    contextTimer=setTimeout(()=>menuAt(item,point),260);
+    if(!dbl)return;
+    lastRight=null;
+    if(active)finish(true);
+    else if(item)begin(item,event);
   });
   document.addEventListener('pointermove',event=>{
     if(!active||event.pointerType==='touch')return;
@@ -716,7 +497,6 @@
     transform(active.element,active.x,active.y);
   },{passive:true});
   document.addEventListener('keydown',event=>{
-    if(event.key==='Escape'&&!contextMenu.hidden){hideMenu();event.preventDefault();return}
     if(!active)return;
     if(event.key==='Escape'){finish(false);event.preventDefault()}
     if(event.key==='Enter'){finish(true);event.preventDefault()}

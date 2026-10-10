@@ -294,11 +294,25 @@
       ['#link','Enlace'],
       ['[data-command="horizontalRule"]','Separador'],
       ['#add-image',''],
+      ['#add-floating-text','Texto libre'],
+      ['#add-floating-emoji','Emoji libre'],
       ['#add-table',''],
       ['#move-up','Subir bloque'],
       ['#move-down','Bajar bloque']
     ];
     for(const [selector,caption] of entries)appendNode(actions,selector,caption);
+    // Cerrar la hoja después de insertar, para ver el nuevo elemento.
+    // Los listeners del botón original siguen activos porque trasladamos el mismo nodo.
+    for(const id of ['add-floating-text','add-floating-emoji']){
+      const button=actions.querySelector('#'+id);
+      if(!button)continue;
+      button.addEventListener('click',()=>{
+        const sticker=document.querySelector('#edit-paper .free-sticker-layer .free-sticker:last-child');
+        closeSheet();
+        // No redirigir el foco al antiguo campo al cerrar el panel.
+        if(sticker)requestAnimationFrame(()=>sticker.focus({preventScroll:true}));
+      },{once:true});
+    }
     block.append(actions);
     ui.body.append(block);
     const tableTools=$('#table-tools');
