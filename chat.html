@@ -1,0 +1,72 @@
+---
+layout: default
+title: Chat · EmLetter
+description: Conversaciones personales en tiempo real con mensajes y archivos entre navegadores.
+permalink: /chat.html
+chat_page: true
+---
+<main class="chat-page" id="contenido">
+  <section class="chat-intro" aria-labelledby="chat-title">
+    <p class="eyebrow">EMLETTER · UN ESPACIO PARA CONVERSAR</p>
+    <h1 id="chat-title">Palabras que nos <em>acercan.</em></h1>
+    <p>Conecta con alguien mediante su ID y deja que la conversación fluya. Sin cuentas, sin complicaciones.</p>
+  </section>
+
+  <section class="chat-card" aria-label="Chat privado">
+    <header class="chat-toolbar">
+      <div class="chat-identity">
+        <span class="chat-id-caption">TU ID</span>
+        <strong id="chat-my-id" class="chat-id-value" aria-live="polite">·····</strong>
+        <button id="chat-copy-id" type="button" class="chat-subtle-button" title="Copiar ID" disabled>Copiar <span aria-hidden="true">↗</span></button>
+      </div>
+      <form id="chat-connect-form" class="chat-connect" autocomplete="off">
+        <label for="chat-peer-id">ID del par</label>
+        <input id="chat-peer-id" type="text" inputmode="numeric" pattern="[0-9]{5}" minlength="5" maxlength="5" placeholder="ej. 48126" aria-describedby="chat-connection-status" required>
+        <button id="chat-connect-button" type="submit" class="chat-action">Conectar <span aria-hidden="true">↗</span></button>
+      </form>
+    </header>
+
+    <div class="chat-conversation-header">
+      <div class="chat-avatar" aria-hidden="true">✦</div>
+      <div class="chat-conversation-person">
+        <strong id="chat-person">Tu próxima conversación</strong>
+        <span id="chat-connection-status" role="status" aria-live="polite">Preparando tu espacio…</span>
+      </div>
+      <span id="chat-online-indicator" class="chat-presence" aria-label="Sin conexión"></span>
+    </div>
+
+    <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="Mensajes de la conversación">
+      <div class="chat-empty" id="chat-empty">
+        <span class="chat-empty-mark" aria-hidden="true">☾</span>
+        <h2>Una conversación empieza aquí.</h2>
+        <p>Comparte tu ID o introduce el de esa persona para empezar a hablar, enviar fotos y compartir momentos.</p>
+      </div>
+    </div>
+
+    <div class="chat-typing" id="chat-typing" hidden role="status" aria-label="La otra persona está escribiendo">
+      <span class="chat-typing-avatar" aria-hidden="true">✦</span>
+      <div class="chat-typing-bubble" aria-hidden="true"><i></i><i></i><i></i></div>
+      <span class="sr-only">La otra persona está escribiendo</span>
+    </div>
+
+    <form id="chat-message-form" class="chat-composer" autocomplete="off">
+      <label for="chat-text" class="sr-only">Mensaje</label>
+      <textarea id="chat-text" placeholder="Escribe un mensaje…" rows="1" maxlength="4000" enterkeyhint="send" disabled></textarea>
+      <label class="chat-attach" for="chat-files" tabindex="0" role="button" title="Adjuntar archivos" aria-label="Adjuntar archivos">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.2 11.5-8.8 8.7a5 5 0 0 1-7.1-7.1L15 3.5a3.4 3.4 0 1 1 4.8 4.8L10 18a1.7 1.7 0 0 1-2.4-2.4l9-9"/></svg>
+      </label>
+      <input id="chat-files" class="sr-only" type="file" multiple aria-label="Seleccionar archivos para enviar">
+      <button type="submit" class="chat-send" id="chat-send" disabled aria-label="Enviar mensaje" title="Enviar mensaje">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7.2 20-4.1-8.7L2 9.2 22 2Z"/><path d="M22 2 10.7 13.3"/></svg>
+      </button>
+    </form>
+    <div class="chat-status-row">
+      <span id="chat-status" role="status" aria-live="polite">Esperando conexión…</span>
+      <span>↗ Envío directo entre navegadores</span>
+    </div>
+  </section>
+
+  <p class="chat-help">Los IDs son temporales y se conservan durante esta sesión. Se admiten archivos de hasta 25 MB; los superiores a 220 KB no conservan su contenido después de recargar. El historial se guarda en este navegador; tu interlocutor debe estar conectado para recibir mensajes o archivos. No compartas datos sensibles: el ID de cinco cifras no es una contraseña.</p>
+  <footer class="bottom-note"><span>© {{ site.time | date: '%Y' }} Dylan Meca</span><a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a></footer>
+</main>
+<noscript><p class="chat-noscript">Activa JavaScript para utilizar el chat.</p></noscript>
