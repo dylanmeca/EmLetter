@@ -7,6 +7,21 @@
   let root=null;
   const MAX=1600;
   const clamp=n=>Math.max(-MAX,Math.min(MAX,Math.round(n)));
+  // Impide que un elemento arrastrado amplíe el ancho de la página móvil
+  // (Safari puede reajustar el zoom cuando cambia el ancho desplazable).
+  function clampToPaper(item,x,y){
+    const nx=clamp(x),ny=clamp(y);
+    if(!window.matchMedia('(max-width:760px)').matches||!item?.element)return {x:nx,y:ny};
+    const paper=editingPaper;
+    const w=paper.clientWidth;
+    const width=Math.max(1,Math.min(w,item.element.getBoundingClientRect().width||40));
+    if(item.kind==='sticker')return {x:Math.max(0,Math.min(nx,w-width-4)),y:ny};
+    if(item.kind==='block'){
+      const contentWidth=root?.clientWidth||w;
+      return {x:Math.max(0,Math.min(nx,contentWidth-width)),y:ny};
+    }
+    return {x:Math.max(-w/2,Math.min(nx,w/2)),y:ny};
+  }
   const zero=()=>({blocks:[],decor:{},stickers:[]});
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
   let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
@@ -492,8 +507,8 @@
   document.addEventListener('pointermove',event=>{
     if(!active||event.pointerType==='touch')return;
     refreshActive();
-    active.x=clamp(active.originX+event.clientX-active.startX);
-    active.y=clamp(active.originY+event.clientY-active.startY);
+    const point=clampToPaper(active,active.originX+event.clientX-active.startX,active.originY+event.clientY-active.startY);
+    active.x=point.x;active.y=point.y;
     transform(active.element,active.x,active.y);
   },{passive:true});
   document.addEventListener('keydown',event=>{
@@ -526,7 +541,16 @@
   editingPaper.addEventListener('pointermove',event=>{
     if(event.pointerType!=='touch')return;
     if(touchPoint&&Math.hypot(event.clientX-touchPoint.x,event.clientY-touchPoint.y)>15){clearTimeout(longTimer);touchPoint=null}
-    if(active){refreshActive();active.x=clamp(active.originX+event.clientX-active.startX);active.y=clamp(active.originY+event.clientY-active.startY);transform(active.element,active.x,active.y);event.preventDefault()}
+    if(active){
+      refreshActive();
+      const point=clampToPaper(active,active.originX+event.clientX-active.startX,active.originY+event.clientY-active.startY);
+      active.x=point.x;active.y=point.y;
+      transform(active.element,active.x,active.y);
+      event.preventDefault();
+    }
+  },{passive:false});
+  editingPaper.addEventListener('touchmove',event=>{
+    if(active&&event.cancelable)event.preventDefault();
   },{passive:false});
   ['pointerup','pointercancel'].forEach(name=>editingPaper.addEventListener(name,event=>{
     if(event.pointerType!=='touch')return;
@@ -534,8 +558,21 @@
   }));
   const api={
     sanitize:normalize,
-    capture(){return normalize(layout)},
-    showReader(value){if(active)finish(true);layout=normalize(value);apply(readingPaper)},
+    capture(){
+      // Compartir o exportar durante la colocación no pierde el último punto.
+      if(active)finish(true);
+      return normalize(layout);
+    },
+    showReader(value){
+      if(active)finish(true);
+      layout=normalize(value);
+      apply(readingPaper);
+      // La primera lectura puede ocurrir mientras #reader está oculto. Al
+      // mostrarlo medimos de nuevo la altura de los bloques y sus posiciones.
+      requestAnimationFrame(()=>{
+        if(!document.getElementById('reader')?.hidden)apply(readingPaper);
+      });
+    },
     restore(value){if(active)finish(false);layout=normalize(value);apply(editingPaper)},
     // Se aplica al volver del modo vista previa sin descartar los desplazamientos.
     resume(){apply(editingPaper)}

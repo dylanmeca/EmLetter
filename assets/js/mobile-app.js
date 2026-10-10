@@ -388,6 +388,16 @@
 
   function init(){
     if(!$('#composer'))return;
+    // El copyright del editor se despliega sólo cuando el usuario lo pide.
+    const footerToggle=$('#mobile-footer-toggle');
+    if(footerToggle){
+      footerToggle.addEventListener('click',()=>{
+        const expanded=footerToggle.getAttribute('aria-expanded')==='true';
+        footerToggle.setAttribute('aria-expanded',String(!expanded));
+        footerToggle.setAttribute('aria-label',expanded?'Mostrar copyright y política de privacidad':'Ocultar copyright y política de privacidad');
+        $('#composer').classList.toggle('mobile-footer-expanded',!expanded);
+      });
+    }
     createUI();
     syncMode();
     media.addEventListener?.('change',syncMode);
