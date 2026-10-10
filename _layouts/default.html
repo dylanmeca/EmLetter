@@ -19,6 +19,9 @@
   {% if page.chat_page %}
   <link rel="stylesheet" href="{{ '/assets/css/chat.css' | relative_url }}?v=2">
   {% endif %}
+  {% if page.layout == 'tutorial' %}
+  <link rel="stylesheet" href="{{ '/assets/css/tutorial.css' | relative_url }}?v=1">
+  {% endif %}
 </head>
 <body>
   {% include header.html %}

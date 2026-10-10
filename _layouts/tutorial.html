@@ -1,0 +1,79 @@
+---
+layout: default
+---
+<main class="tutorial-page" id="inicio-tutorial">
+  <div class="tutorial-grid">
+    <article class="privacy-card tutorial-card" id="contenido-tutorial">
+      {{ content }}
+    </article>
+
+    <aside class="tutorial-aside" aria-label="Navegación de la guía">
+      <details class="tutorial-toc" open>
+        <summary class="tutorial-toc-heading">
+          <span class="tutorial-toc-heading-label"><span class="tutorial-toc-icon" aria-hidden="true">☷</span> En esta página</span>
+          <span class="tutorial-chevron" aria-hidden="true"></span>
+        </summary>
+        <nav class="tutorial-toc-nav" aria-label="Índice del tutorial">
+          <details class="tutorial-toc-group" open>
+            <summary>Primeros pasos</summary>
+            <ul>
+              <li><a href="#abrir-editor">Abrir el editor</a></li>
+              <li><a href="#escribir-formato">Escribir y dar formato</a></li>
+              <li><a href="#version-movil">Usar EmLetter en móvil</a></li>
+            </ul>
+          </details>
+          <details class="tutorial-toc-group" open>
+            <summary>Personalizar tu carta</summary>
+            <ul>
+              <li><a href="#atmosferas">Elegir una atmósfera</a></li>
+              <li><a href="#colores">Rueda cromática y HEX</a></li>
+              <li><a href="#imagenes-adornos">Imágenes, adornos y firma</a></li>
+              <li><a href="#elementos-libres">Texto y emoji libres</a></li>
+            </ul>
+          </details>
+          <details class="tutorial-toc-group" open>
+            <summary>Compartir y exportar</summary>
+            <ul>
+              <li><a href="#vista-previa">Vista previa</a></li>
+              <li><a href="#compartir-enlace">Generar un enlace</a></li>
+              <li><a href="#descargar-imagen">Descargar como imagen</a></li>
+            </ul>
+          </details>
+          <details class="tutorial-toc-group" open>
+            <summary>Conversar en EmLetter</summary>
+            <ul>
+              <li><a href="#chat-conectar">Conectar mediante ID</a></li>
+              <li><a href="#chat-mensajes">Mensajes y archivos</a></li>
+              <li><a href="#chat-desconectar">Desconectar</a></li>
+            </ul>
+          </details>
+          <details class="tutorial-toc-group" open>
+            <summary>Consejos y privacidad</summary>
+            <ul>
+              <li><a href="#consejos">Antes de cerrar</a></li>
+              <li><a href="#privacidad">Tus enlaces y datos</a></li>
+            </ul>
+          </details>
+          <a class="tutorial-toc-top" href="#inicio-tutorial">↑ Volver arriba</a>
+        </nav>
+      </details>
+    </aside>
+  </div>
+
+  <footer class="tutorial-footer">
+    <span>© {{ site.time | date: '%Y' }} Dylan Meca</span>
+    <a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a>
+  </footer>
+</main>
+<script>
+  // El índice es visible de entrada en escritorio y compacto al abrir en móvil.
+  (function () {
+    var index = document.querySelector('.tutorial-toc');
+    if (!index || !window.matchMedia) return;
+    var mobile = window.matchMedia('(max-width: 860px)');
+    if (mobile.matches) index.open = false;
+    index.addEventListener('click', function (event) {
+      if (mobile.matches && event.target.closest('a[href^="#"]')) index.open = false;
+    });
+  }());
+</script>
