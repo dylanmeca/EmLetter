@@ -66,7 +66,7 @@ chat_page: true
     </div>
   </section>
 
-  <p class="chat-help">Los IDs son temporales y se conservan durante esta sesión. Se admiten archivos de hasta 25 MB; los superiores a 220 KB no conservan su contenido después de recargar. El historial se guarda en este navegador; tu interlocutor debe estar conectado para recibir mensajes o archivos. No compartas datos sensibles: el ID de cinco cifras no es una contraseña.</p>
+  <p class="chat-help">El ID y el historial de mensajes permanecen en esta pestaña durante la sesión. Los archivos se guardan en IndexedDB (pueden permanecer incluso después de cerrar la pestaña) y se transfieren directamente entre dispositivos; el tamaño permitido depende del espacio disponible, la memoria y la red. Para descargar archivos muy grandes sin cargarlos completos en memoria, utiliza Chrome o Edge en HTTPS. Desconectar finaliza el chat para ambas personas, pero conserva el historial. No compartas información sensible: un ID de cinco cifras no funciona como contraseña.</p>
   <footer class="bottom-note"><span>© {{ site.time | date: '%Y' }} Dylan Meca</span><a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a></footer>
 </main>
 <noscript><p class="chat-noscript">Activa JavaScript para utilizar el chat.</p></noscript>
