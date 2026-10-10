@@ -13,6 +13,8 @@
     current: $("pdf-current"), total: $("pdf-total"), range: $("pdf-page-range"),
     zoomOut: $("pdf-zoom-out"), zoomIn: $("pdf-zoom-in"), zoomReset: $("pdf-zoom-reset"),
     rotate: $("pdf-rotate"), rotateMobile: $("pdf-rotate-mobile"), theme: $("pdf-theme"), fit: $("pdf-fit"), settings: $("pdf-preferences"),
+    brightness: $("pdf-brightness"), brightnessValue: $("pdf-brightness-value"),
+    blueLight: $("pdf-blue-light"), blueLightValue: $("pdf-blue-light-value"),
     stage: $("pdf-reader-stage"), empty: $("pdf-empty"), scroll: $("pdf-scroll"),
     sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"),
     annotations: $("pdf-annotation-layer"), loading: $("pdf-loading"),
@@ -21,14 +23,33 @@
   if (!elements.stage) return;
 
   const SETTINGS_KEY = "emletter-pdf-reader-prefs-v1";
-  let settings = { theme: "auto", fit: "width" };
+  let settings = { theme: "auto", fit: "width", brightness: 100, blueLight: 0 };
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
     if (["auto", "original", "dark"].includes(stored.theme)) settings.theme = stored.theme;
     if (["width", "page"].includes(stored.fit)) settings.fit = stored.fit;
+    if (typeof stored.brightness === "number" && Number.isFinite(stored.brightness)) {
+      settings.brightness = clamp(Math.round(stored.brightness / 5) * 5, 50, 150);
+    }
+    if (typeof stored.blueLight === "number" && Number.isFinite(stored.blueLight)) {
+      settings.blueLight = clamp(Math.round(stored.blueLight / 5) * 5, 0, 100);
+    }
   } catch (_) { /* El lector también funciona sin almacenamiento. */ }
   elements.theme.value = settings.theme;
   elements.fit.value = settings.fit;
+  elements.brightness.value = String(settings.brightness);
+  elements.blueLight.value = String(settings.blueLight);
+
+  function applyReadingFilters() {
+    elements.sheet.style.setProperty("--pdf-reader-brightness", String(settings.brightness / 100));
+    // Una capa ámbar reduce visualmente los azules, sin alterar el PDF original.
+    elements.sheet.style.setProperty("--pdf-reader-warmth", String(settings.blueLight / 100 * .65));
+    elements.brightnessValue.textContent = `${settings.brightness}%`;
+    elements.blueLightValue.textContent = `${settings.blueLight}%`;
+    elements.brightness.setAttribute("aria-valuetext", `${settings.brightness}%`);
+    elements.blueLight.setAttribute("aria-valuetext", `${settings.blueLight}%`);
+  }
+  applyReadingFilters();
 
   const state = {
     lib: null, libPromise: null, pdf: null, page: 1, total: 0,
@@ -378,6 +399,16 @@
     settings.fit = elements.fit.value;
     saveSettings();
     if (state.pdf) render({ preserveCenter: false });
+  });
+  elements.brightness.addEventListener("input", () => {
+    settings.brightness = clamp(Number(elements.brightness.value) || 100, 50, 150);
+    applyReadingFilters();
+    saveSettings();
+  });
+  elements.blueLight.addEventListener("input", () => {
+    settings.blueLight = clamp(Number(elements.blueLight.value) || 0, 0, 100);
+    applyReadingFilters();
+    saveSettings();
   });
   function saveSettings() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (_) {}
