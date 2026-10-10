@@ -1024,7 +1024,7 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 #edit-paper .free-moving{position:relative!important;z-index:9!important;outline:1px dashed #a6b6e9!important;outline-offset:6px;cursor:move;user-select:none;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66)}
 #edit-paper .free-placed{position:relative;will-change:transform}
 #edit-paper .emoji-frame .frame-side{pointer-events:auto}
-#edit-paper .ornament-symbol,#edit-paper .ornament-line,#edit-paper .end-ornament,#edit-paper .letter-signature{cursor:context-menu}
+#edit-paper .ornament-symbol,#edit-paper .ornament-line,#edit-paper .end-ornament,#edit-paper .letter-signature{cursor:grab}
 @media (max-width:760px){.placing-element #edit-paper{touch-action:none}}
 
 /* Capas editables para texto y emoji libres, incluidas en los enlaces y la exportación. */
@@ -1034,33 +1034,7 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 #read-paper .free-sticker{user-select:text;pointer-events:none}
 #edit-paper .free-sticker.free-moving{pointer-events:none;z-index:10}
 
-/* Menú contextual propio del lienzo: no altera el menú del resto del sitio. */
-.emletter-context-menu{position:fixed;z-index:1500;min-width:172px;padding:6px;background:#111927;border:1px solid #4c5872;box-shadow:0 12px 38px #0009,0 2px 10px #0006;border-radius:9px;display:grid;gap:3px;color:#e2e8f4}
-.emletter-context-menu[hidden]{display:none}
-.emletter-context-menu button{width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:10px 12px;border-radius:5px;font:inherit;font-size:13px;cursor:pointer}
-.emletter-context-menu button:is(:hover,:focus-visible){background:#34445e;outline:none}
-.emletter-context-menu button:disabled{opacity:.4;cursor:not-allowed}
-.emletter-context-menu button+button{border-top:1px solid #2d374a}
 #edit-paper .free-sticker{touch-action:manipulation}
-
-/* Selector de emojis: menú contextual del editor, estética Ceniza. */
-.emletter-context-menu{max-width:min(344px,calc(100vw - 16px));max-height:min(510px,calc(100dvh - 16px));overflow:hidden}
-.emletter-emoji-switch{border-top:1px solid #35435c!important;margin-top:3px}
-.emletter-emoji-panel{width:320px;max-width:calc(100vw - 36px);display:flex;flex-direction:column;min-height:0;gap:8px;padding:5px 4px 4px}
-.emletter-emoji-panel[hidden]{display:none!important}
-.emletter-emoji-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:#c7d5ee;padding:2px 4px 0}
-.emletter-context-menu .emletter-emoji-close{width:auto!important;padding:3px 8px!important;font-size:19px!important}
-.emletter-emoji-search{box-sizing:border-box;width:100%;min-width:0;padding:9px 11px;background:#0a1121;color:#eff3fb;border:1px solid #46546f;border-radius:6px;font-size:13px}
-.emletter-emoji-search:focus{outline:1px solid #8596c0}
-.emletter-emoji-categories{display:flex;gap:3px;overflow-x:auto;scrollbar-width:thin;padding:2px 0 5px}
-.emletter-context-menu .emletter-emoji-categories button{width:auto;flex:none;padding:5px 8px;font-size:15px;border:1px solid transparent;border-radius:6px}
-.emletter-context-menu .emletter-emoji-categories button[aria-pressed="true"]{background:#364462;border-color:#667a9a}
-.emletter-emoji-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;overflow-y:auto;overflow-x:hidden;align-content:start;min-height:100px;max-height:260px;padding:4px;scrollbar-width:thin}
-.emletter-context-menu .emletter-emoji-grid button{display:flex;align-items:center;justify-content:center;width:100%;height:38px;min-width:0;padding:0;border:0;border-radius:6px;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;font-size:24px;line-height:1.25;white-space:nowrap}
-.emletter-context-menu .emletter-emoji-grid button+button{border-top:0}
-.emletter-emoji-empty{grid-column:1/-1;color:#aebbd2;padding:12px;font-size:12px;text-align:center}
-.emletter-emoji-foot{color:#9aa9c5;font-size:11px;padding:0 4px 2px}
-@media(max-width:440px){.emletter-emoji-panel{width:min(308px,calc(100vw - 38px))}.emletter-emoji-grid{grid-template-columns:repeat(7,minmax(0,1fr))}.emletter-context-menu .emletter-emoji-grid button{font-size:22px;height:36px}}
 
 /* Copias independientes de firmas, símbolos y ornamentos: no cubren el lienzo. */
 #edit-paper .emoji-frame .frame-side{pointer-events:auto}
@@ -1072,3 +1046,8 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 #edit-paper #editor .tiptap,#read-paper #read-content{position:relative;isolation:isolate}
 #edit-paper #editor .tiptap>:is(h1,h2,h3,p).emletter-free-block{cursor:text}
 #edit-paper .free-sticker[data-sticker-id]:focus-visible{outline:1px dashed #a6b6e9}
+
+/* Accesos visibles a elementos libres, sin menú contextual. */
+#composer .toolbar #add-floating-text,#composer .toolbar #add-floating-emoji{font:600 13px Arial,sans-serif;min-height:36px;height:auto;padding:7px 11px;white-space:nowrap;background:#25314e;color:#e9e2f7;border:1px solid #68759b;border-radius:7px}
+#composer .toolbar #add-floating-text:hover,#composer .toolbar #add-floating-emoji:hover{background:#334465;border-color:#a8bce8}
+body.mobile-native .mobile-insert-grid #add-floating-text,body.mobile-native .mobile-insert-grid #add-floating-emoji{font:600 12px Arial,sans-serif;white-space:normal;line-height:1.35;color:#edf1fe;background:#23314c;border:1px solid #65799f}
