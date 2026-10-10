@@ -434,6 +434,41 @@
     if (text !== undefined) elem.textContent = text;
     return elem;
   }
+  // Convierte URLs visibles en enlaces sin interpretar HTML del mensaje.
+  // Conserva los saltos de línea mediante .chat-text { white-space: pre-wrap }.
+  function appendLinkedText(container, text) {
+    const source = String(text || '');
+    const urlPattern = /https?:\/\/[^\s<>"'`]+|www\.[^\s<>"'`]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?:[/?#][^\s<>"'`]*)?/gi;
+    let cursor = 0;
+    for (const match of source.matchAll(urlPattern)) {
+      const index = match.index;
+      // Evita enlazar el dominio como si fuera una URL dentro de un correo.
+      if (index > 0 && /[@\w.-]/.test(source[index - 1])) continue;
+      let candidate = match[0];
+      // La puntuación al final de la frase no forma parte de la dirección.
+      candidate = candidate.replace(/[.,!?;:]+$/g, '');
+      while (candidate.endsWith(')') &&
+          (candidate.match(/\)/g) || []).length > (candidate.match(/\(/g) || []).length) {
+        candidate = candidate.slice(0, -1);
+      }
+      candidate = candidate.replace(/[\]}>]+$/g, '');
+      if (!candidate) continue;
+      const address = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+      let url;
+      try {
+        url = new URL(address);
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) continue;
+      } catch (_) { continue; }
+      if (index > cursor) container.append(document.createTextNode(source.slice(cursor, index)));
+      const anchor = el('a', 'chat-link', candidate);
+      anchor.href = url.href;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      container.append(anchor);
+      cursor = index + candidate.length;
+    }
+    if (cursor < source.length) container.append(document.createTextNode(source.slice(cursor)));
+  }
   function allowedImage(mime) { return /^(image\/(png|jpeg|gif|webp|avif|bmp))$/i.test(mime); }
   function allowedVideo(mime) { return /^(video\/(mp4|webm|ogg|quicktime))$/i.test(mime); }
   function allowedAudio(mime) { return /^(audio\/(mpeg|mp4|ogg|wav|webm|aac|flac|x-wav))$/i.test(mime); }
@@ -490,9 +525,13 @@
   function messageRow(msg) {
     const row = el('div', `chat-message ${msg.direction === 'out' ? 'outgoing' : 'incoming'}`);
     row.dataset.messageId = msg.id;
+    if (msg.kind === 'file') row.classList.add('is-file');
     const bubble = el('div', 'chat-bubble');
-    if (msg.kind === 'text') bubble.append(el('div', 'chat-text', msg.text));
-    else addFileContent(bubble, msg);
+    if (msg.kind === 'text') {
+      const content = el('div', 'chat-text');
+      appendLinkedText(content, msg.text);
+      bubble.append(content);
+    } else addFileContent(bubble, msg);
     const meta = el('div', 'chat-metadata');
     const clock = el('time', '', fmtTime(msg.time));
     clock.dateTime = new Date(msg.time).toISOString();
