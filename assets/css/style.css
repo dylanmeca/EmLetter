@@ -406,7 +406,6 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
   body.mobile-native .designer,
   body.mobile-native .editor-shell>.toolbar,
   body.mobile-native .editor-help,
-  body.mobile-native .bottom-note,
   body.mobile-native .writing>.share-row,
   body.mobile-native .writing>#share-result{display:none!important}
   body.mobile-native #composer{
@@ -459,6 +458,63 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
     pointer-events:none;
   }
   body.mobile-native .editor-footer span:last-child{display:none}
+  /* El contador deja de superponerse al footer cuando se llega al final. */
+  body.mobile-native .editor-footer{
+    position:sticky;
+    width:max-content;
+    margin-left:14px;
+  }
+
+  /* Pie de página integrado en el editor móvil: forma parte del desplazamiento,
+     sin superponerse a la carta ni a la navegación inferior fija. */
+  body.mobile-native #composer>.bottom-note{
+    display:flex;
+    flex-direction:row;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    width:auto;
+    margin:0 13px 14px;
+    padding:10px 11px 10px 15px;
+    border:1px solid #8195c12d;
+    border-radius:16px;
+    background:linear-gradient(135deg,#101a30f2,#071022f2);
+    box-shadow:0 9px 26px #0004,inset 0 1px 0 #ffffff08;
+    color:#aebbd4;
+    font:500 11px/1.5 Inter,"Segoe UI",Arial,sans-serif;
+    letter-spacing:.01em;
+    text-align:left;
+  }
+  body.mobile-native #composer>.bottom-note>span{
+    white-space:nowrap;
+    color:#a3b2cf;
+  }
+  body.mobile-native #composer>.bottom-note>a{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    min-height:39px;
+    padding:0 12px;
+    border:1px solid #8299cd38;
+    border-radius:11px;
+    background:#182640;
+    color:#dce7ff;
+    font:600 11px/1.2 Inter,"Segoe UI",Arial,sans-serif;
+    letter-spacing:0;
+    text-decoration:none;
+    white-space:nowrap;
+    transition:background .16s ease,border-color .16s ease;
+  }
+  body.mobile-native #composer>.bottom-note>a::before{
+    content:"◇";
+    color:#a8bce8;
+    font:17px/1 Georgia,serif;
+  }
+  body.mobile-native #composer>.bottom-note>a:is(:hover,:focus-visible){
+    background:#233756;
+    border-color:#99b3e480;
+  }
   body.mobile-native #notice{
     z-index:100;
     bottom:calc(88px + env(safe-area-inset-bottom));
@@ -816,6 +872,17 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
   body.mobile-native.reading .reader-actions>span{display:none}
   body.mobile-native.reading .reader-actions .outline{min-height:40px;border-radius:11px}
 
+}
+
+@media(max-width:370px){
+  body.mobile-native #composer>.bottom-note{
+    flex-direction:column;
+    justify-content:center;
+    padding:12px;
+    gap:9px;
+    text-align:center;
+  }
+  body.mobile-native #composer>.bottom-note>a{width:100%}
 }
 
 /* Privacy policy page. */
