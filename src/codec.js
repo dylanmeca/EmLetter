@@ -21,6 +21,17 @@ export function cleanPlacement(value){
   const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
   if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))data.decor[key]={x:Math.max(-1600,Math.min(1600,Math.round(point.x))),y:Math.max(-1600,Math.min(1600,Math.round(point.y)))};
  }
+ if(Array.isArray(value.stickers))for(const s of value.stickers.slice(0,80)){
+  if(!s||typeof s.text!=='string'||!Number.isFinite(s.x)||!Number.isFinite(s.y))continue;
+  const st={};const style=s.style||{};
+  if(typeof style.fontFamily==='string'&&/^[\w\s,'"-]{1,140}$/.test(style.fontFamily))st.fontFamily=style.fontFamily;
+  if(Number.isFinite(style.fontSize)&&style.fontSize>=8&&style.fontSize<=120)st.fontSize=Math.round(style.fontSize);
+  if(/^(normal|bold|[1-9]00)$/.test(String(style.fontWeight)))st.fontWeight=String(style.fontWeight);
+  if(/^(normal|italic|oblique)$/.test(String(style.fontStyle)))st.fontStyle=style.fontStyle;
+  if(/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(String(style.color)))st.color=style.color;
+  if(['left','center','right','justify'].includes(style.textAlign))st.textAlign=style.textAlign;
+  data.stickers.push({id:typeof s.id==='string'&&/^s[\da-z]{1,16}$/.test(s.id)?s.id:'s'+data.stickers.length,text:s.text.slice(0,2000),x:Math.max(-1600,Math.min(1600,Math.round(s.x))),y:Math.max(-1600,Math.min(1600,Math.round(s.y))),style:st});
+ }
  return data;
 }
 
