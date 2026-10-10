@@ -1,5 +1,104 @@
 ---
-layout: carta
-title: EmLetter
+layout: default
+title: EmLetter · Cartas que dicen lo que sientes
+description: Escribe, diseña y comparte cartas únicas con EmLetter. Dale forma a tus palabras, a tu manera.
 permalink: /
 ---
+
+<!-- Mantiene activos los enlaces de cartas generados antes de trasladar el editor a home.html. -->
+<script>
+  if (/^#c[12]\./.test(window.location.hash)) {
+    window.location.replace("{{ '/home.html' | relative_url }}" + window.location.hash);
+  }
+</script>
+
+<main class="landing-page" id="contenido">
+  <section class="landing-hero" aria-labelledby="landing-title">
+    <div class="landing-hero-copy">
+      <p class="landing-kicker">✦ &nbsp; UN PEDACITO DE TI, EN PALABRAS</p>
+      <h1 id="landing-title">EmLetter<span class="landing-title-star" aria-hidden="true"> ✦</span></h1>
+      <p class="landing-description">Hay palabras que merecen quedarse. Escribe, diseña y comparte cartas tan únicas como lo que quieres decir.</p>
+      <div class="landing-actions">
+        <a class="landing-button landing-button-outline" href="{{ '/chat.html' | relative_url }}"><span aria-hidden="true">✧</span> Chat</a>
+        <a class="landing-button landing-button-primary" href="{{ '/home.html' | relative_url }}">Comenzar a editar <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+    <div class="landing-hero-decoration" aria-hidden="true">
+      <div class="landing-orbit orbit-one"></div>
+      <div class="landing-orbit orbit-two"></div>
+      <div class="landing-float-star star-one">✦</div>
+      <div class="landing-float-star star-two">✧</div>
+      <div class="landing-letter-shadow"></div>
+      <div class="landing-letter-card">
+        <span class="landing-letter-symbol">☾ &nbsp; ✦</span>
+        <span class="landing-letter-greeting">Para ti,</span>
+        <span class="landing-letter-rule"></span>
+        <span class="landing-letter-rule"></span>
+        <span class="landing-letter-rule short"></span>
+        <span class="landing-letter-sign">con cariño ♡</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-features" aria-label="Descubre EmLetter">
+    <article class="landing-feature">
+      <div class="landing-feature-art" aria-hidden="true">
+        <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="46" y="17" width="75" height="89" rx="7" transform="rotate(9 46 17)" stroke="currentColor" stroke-width="2.6" opacity=".36"/>
+          <rect x="30" y="17" width="76" height="89" rx="7" stroke="currentColor" stroke-width="2.8"/>
+          <path d="M44 41h38M44 54h49M44 67h31" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" opacity=".65"/>
+          <path d="M74 83c5-9 11-1 15-9 2-4 5-4 8-1" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
+          <path d="M116 35l15-17 9 8-16 17-12 5 4-13Z" fill="currentColor" opacity=".9"/>
+        </svg>
+      </div>
+      <div class="landing-feature-body">
+        <h2>Escribe lo que sientes</h2>
+        <p>Convierte tus ideas en cartas memorables con un editor sencillo, títulos, imágenes y formato a tu gusto.</p>
+        <a class="landing-learn" href="{{ '/tutorial.html' | relative_url }}">Más información <span aria-hidden="true">↗</span></a>
+      </div>
+    </article>
+
+    <article class="landing-feature">
+      <div class="landing-feature-art" aria-hidden="true">
+        <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="34" y="13" width="91" height="92" rx="9" stroke="currentColor" stroke-width="2.8"/>
+          <path d="M35 37h89M35 58h89" stroke="currentColor" stroke-width="2.5" opacity=".4"/>
+          <circle cx="48" cy="25" r="4" fill="currentColor"/>
+          <circle cx="60" cy="25" r="4" fill="currentColor" opacity=".5"/>
+          <path d="M47 79h20M47 88h31" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="102" cy="78" r="16" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M102 62a16 16 0 0 1 16 16h-16V62Z" fill="currentColor" opacity=".7"/>
+          <path d="M102 78 91 89" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M130 40c0 4-3 7-7 7 4 0 7 3 7 7 0-4 3-7 7-7-4 0-7-3-7-7Z" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="landing-feature-body">
+        <h2>Diseña a tu manera</h2>
+        <p>Combina tipografías, colores, atmósferas y pequeños detalles para que cada carta tenga su propio estilo.</p>
+        <a class="landing-learn" href="{{ '/tutorial.html' | relative_url }}">Más información <span aria-hidden="true">↗</span></a>
+      </div>
+    </article>
+
+    <article class="landing-feature">
+      <div class="landing-feature-art" aria-hidden="true">
+        <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="29" y="32" width="103" height="68" rx="9" stroke="currentColor" stroke-width="2.8"/>
+          <path d="m30 39 50 34 51-34" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="m32 94 32-30M129 94 97 64" stroke="currentColor" stroke-width="2.4" opacity=".6"/>
+          <path d="M79 13c3-6 9-5 11 0 2-6 9-6 12-1 5 10-12 21-12 21S74 23 79 13Z" fill="currentColor"/>
+          <path d="M21 19v16M13 27h16M134 16v12M128 22h12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+        </svg>
+      </div>
+      <div class="landing-feature-body">
+        <h2>Comparte cada momento</h2>
+        <p>Envía tu creación con un enlace o descárgala como imagen. Tus palabras, listas para llegar a alguien especial.</p>
+        <a class="landing-learn" href="{{ '/tutorial.html' | relative_url }}">Más información <span aria-hidden="true">↗</span></a>
+      </div>
+    </article>
+  </section>
+
+  <footer class="landing-footer">
+    <span>✦ &nbsp; HAY COSAS QUE SE DICEN MEJOR EN UNA CARTA</span>
+    <a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a>
+  </footer>
+</main>

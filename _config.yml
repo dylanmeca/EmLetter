@@ -4,7 +4,7 @@ lang: es
 locale: es_PE
 url: "https://emletter.vercel.app"
 baseurl: ""
-logo: "/assets/icons/icon-512.png"
+logo: "/assets/favicon.svg"
 author:
   name: Dylan Meca
 
