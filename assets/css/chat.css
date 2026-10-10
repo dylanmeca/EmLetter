@@ -97,3 +97,10 @@
   .chat-help{padding:0 5px}
 }
 @media(prefers-reduced-motion:reduce){.chat-message,.chat-typing-bubble i{animation:none}}
+
+/* Alterna el estado del botón cuando hay una conexión activa. */
+.chat-action.is-disconnect{background:#432d37;border-color:#aa7486;color:#f9e1e8}
+.chat-action.is-disconnect:hover{background:#62404f}
+.chat-connect input[readonly]{opacity:.7;cursor:default}
+.chat-file-link:is(button){font:inherit;text-align:left;cursor:pointer;width:100%;border:0}
+.chat-file-link:disabled{opacity:.64;cursor:progress}
