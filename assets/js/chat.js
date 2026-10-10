@@ -28,6 +28,7 @@
 
   function sessionGet(key) { try { return sessionStorage.getItem(key); } catch (_) { return null; } }
   function sessionSet(key, value) { try { sessionStorage.setItem(key, value); return true; } catch (_) { return false; } }
+  function sessionRemove(key) { try { sessionStorage.removeItem(key); } catch (_) {} }
   function isFiveDigits(id) { return /^\d{5}$/.test(String(id || '')); }
   function makeFiveDigits() {
     const random = new Uint32Array(1);
@@ -113,6 +114,8 @@
   const objectUrls = new Set();
   const previewLoading = new Set();
   let dbPromise = null;
+  let closingConnection = null;
+  let closingTimer = null;
 
   function getDB() {
     if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB no disponible'));
@@ -163,6 +166,36 @@
       });
     } catch (_) { /* Se liberará espacio cuando el navegador purgue sus datos. */ }
   }
+  // Borra todos los archivos (y sus bloques), incluso los que ya no aparecen
+  // en los últimos mensajes conservados de esa conversación.
+  async function deleteConversationFiles(peerId, knownIds = []) {
+    if (!isFiveDigits(peerId)) return;
+    const db = await getDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(['files', 'chunks'], 'readwrite');
+      const files = tx.objectStore('files');
+      const chunks = tx.objectStore('chunks');
+      const deleted = new Set();
+      const deleteFile = (id) => {
+        if (!validMessageId(id) || deleted.has(id)) return;
+        deleted.add(id);
+        files.delete(id);
+        chunks.delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
+      };
+      for (const id of knownIds) deleteFile(id);
+      const cursor = files.openCursor();
+      cursor.onsuccess = () => {
+        const entry = cursor.result;
+        if (!entry) return;
+        if (entry.value?.peerId === peerId) deleteFile(entry.key);
+        entry.continue();
+      };
+      tx.oncomplete = resolve;
+      tx.onabort = () => reject(tx.error || new Error('No se pudieron borrar los archivos'));
+      tx.onerror = () => reject(tx.error || new Error('Error al borrar archivos'));
+    });
+  }
+
   async function saveChunkBatch(id, chunks) {
     const db = await getDB();
     return new Promise((resolve, reject) => {
@@ -348,6 +381,52 @@
       ui.person.textContent = `Conversación con ${id}`;
       ui.peerId.value = id;
     }
+  }
+  // El borrado afecta únicamente a esta conversación: no modifica el ID
+  // propio ni las conversaciones antiguas con otras personas.
+  function eraseConversation(peerId) {
+    if (!isFiveDigits(peerId)) return;
+    const ids = new Set((histories[peerId] || []).filter((msg) => msg.kind === 'file').map((msg) => msg.id));
+    for (const transfer of incomingFiles.values()) if (transfer.peerId === peerId) ids.add(transfer.id);
+    for (const transfer of outgoingFiles.values()) if (transfer.peerId === peerId) ids.add(transfer.id);
+    for (const msg of histories[peerId] || []) {
+      if (msg.objectUrl) {
+        URL.revokeObjectURL(msg.objectUrl);
+        objectUrls.delete(msg.objectUrl);
+      }
+      previewLoading.delete(msg.id);
+    }
+    delete histories[peerId];
+    saveHistories();
+    // La limpieza en IndexedDB es asíncrona, sin bloquear el reinicio de la pantalla.
+    void deleteConversationFiles(peerId, [...ids]).catch(() => {
+      setStatus('Chat reiniciado; el navegador no pudo borrar algunos archivos de IndexedDB.');
+    });
+  }
+  function endChatLocally(peerId) {
+    clearTimeout(connectingTimeout);
+    clearTransfers();
+    eraseConversation(peerId);
+    resetChatInterface();
+  }
+  // Vuelve a mostrar la pantalla inicial después de borrar la conversación.
+  // El ID de esta persona permanece válido para futuras conexiones.
+  function resetChatInterface() {
+    activePeerId = '';
+    sessionRemove(KEY_LAST_PEER);
+    ui.peerId.value = '';
+    ui.person.textContent = 'Tu próxima conversación';
+    ui.text.value = '';
+    ui.text.style.height = 'auto';
+    ui.files.value = '';
+    hideTyping();
+    clearTimeout(typingTimeout);
+    lastTypingSent = 0;
+    render();
+    ui.messages.scrollTop = 0;
+    setConnectionStatus(peerReady ? 'Listo para conversar · esperando conexión' : 'Reconectando con la red…');
+    setStatus(peerReady ? 'Tu ID está disponible. Compártelo o introduce el de otra persona.' :
+      'Esperando a que tu ID vuelva a estar disponible en la red.');
   }
   function el(tag, className, text) {
     const elem = document.createElement(tag);
@@ -579,8 +658,15 @@
     // Guardar en segundo plano, sin bloquear el envío. El Blob queda en IndexedDB.
     saveStoredFile({ id, peerId: recipient, name, mime, size: file.size,
       time, total, complete: true, blob: file }).then(() => {
+      if (!histories[recipient]?.some((msg) => msg.id === id)) {
+        void discardIncompleteFile(id); // Se desconectó mientras IndexedDB escribía.
+        return;
+      }
       updateMessageInChat(recipient, id, { stored: true });
-    }).catch(() => setStatus('Archivo enviado, pero no hay espacio para conservar una copia local.'));
+    }).catch(() => {
+      if (histories[recipient]?.some((msg) => msg.id === id))
+        setStatus('Archivo enviado, pero no hay espacio para conservar una copia local.');
+    });
     if (!online() || initialConnection !== connection || recipient !== activePeerId) {
       updateMessageInChat(recipient, id, { status: 'failed' }); return;
     }
@@ -654,7 +740,10 @@
       }
       await saveStoredFile({ id: transfer.id, peerId: transfer.peerId, name: transfer.name,
         mime: transfer.mime, size: transfer.size, time: transfer.time, total: transfer.total, complete: false });
-      if (connection !== bound || incomingFiles.get(packet.id) !== transfer) return;
+      if (connection !== bound || incomingFiles.get(packet.id) !== transfer) {
+        void discardIncompleteFile(packet.id);
+        return;
+      }
       // Mostrar el avance también en el lado receptor.
       addMessage({ id: transfer.id, kind: 'file', direction: 'in', name: transfer.name,
         mime: transfer.mime, size: transfer.size, time: transfer.time,
@@ -675,7 +764,10 @@
       await saveStoredFile({ id, peerId: transfer.peerId, name: transfer.name,
         mime: transfer.mime, size: transfer.size, time: transfer.time,
         total: transfer.total, complete: true });
-      if (incomingFiles.get(id) !== transfer || connection !== transfer.connection) return;
+      if (incomingFiles.get(id) !== transfer || connection !== transfer.connection) {
+        void discardIncompleteFile(id);
+        return;
+      }
       incomingFiles.delete(id);
       updateMessageInChat(transfer.peerId, id, { status: 'delivered', stored: true, progress: '' });
       safeSend({ kind: 'ack', id });
@@ -693,8 +785,12 @@
     transfer.writing = true;
     const batch = transfer.pending.splice(0);
     try {
-      await saveChunkBatch(transfer.id, batch);
       if (incomingFiles.get(transfer.id) !== transfer || connection !== transfer.connection) return;
+      await saveChunkBatch(transfer.id, batch);
+      if (incomingFiles.get(transfer.id) !== transfer || connection !== transfer.connection) {
+        void discardIncompleteFile(transfer.id);
+        return;
+      }
       if (transfer.next === transfer.total) {
         await finishIncomingFile(transfer.id);
       } else {
@@ -729,13 +825,17 @@
     if (!packet || typeof packet !== 'object' || typeof packet.kind !== 'string') return;
     switch (packet.kind) {
       case 'disconnect': {
+        // La persona remota solicitó finalizar y borrar esta conversación.
         if (connection) {
           const old = connection;
+          const partner = old.peer;
+          try { old.send({ kind: 'disconnect-ack' }); } catch (_) {}
           connection = null;
-          old.close();
-          clearTransfers();
-          setConnectionStatus('Desconectado · conversación finalizada');
-          setStatus('La otra persona ha finalizado la conexión.');
+          closingConnection = old;
+          endChatLocally(partner);
+          // Esperar un instante a que el ACK salga por el canal confiable.
+          clearTimeout(closingTimer);
+          closingTimer = setTimeout(() => closeFinishedConnection(old), 300);
         }
         break;
       }
@@ -812,6 +912,7 @@
     clearTimeout(typingTimeout);
   }
   function bindConnection(conn) {
+    if (closingConnection) { conn.close(); return; }
     if (!isFiveDigits(conn.peer) || conn.peer === localId) { conn.close(); return; }
     if (connection && connection !== conn && connection.open && connection.peer !== conn.peer) {
       setStatus(`No se aceptó el ID ${conn.peer}: ya tienes una conversación activa.`);
@@ -835,13 +936,22 @@
       setStatus(`Conectado con ${conn.peer}. Ya pueden conversar.`);
       ui.text.focus();
     });
-    conn.on('data', (data) => { if (connection === conn) handleData(data); });
+    conn.on('data', (data) => {
+      if (closingConnection === conn) {
+        if (data && data.kind === 'disconnect-ack') closeFinishedConnection(conn);
+        return;
+      }
+      if (connection === conn) handleData(data);
+    });
     conn.on('close', () => {
+      if (closingConnection === conn) {
+        closingConnection = null;
+        clearTimeout(closingTimer);
+        return;
+      }
       if (connection !== conn) return;
       connection = null;
-      clearTransfers();
-      setConnectionStatus('Desconectado · vuelve a conectar');
-      setStatus(`Se perdió la conexión con ${conn.peer}.`);
+      endChatLocally(conn.peer);
     });
     conn.on('error', () => {
       if (connection !== conn) return;
@@ -852,20 +962,25 @@
       }
     });
   }
+  function closeFinishedConnection(conn) {
+    if (closingConnection !== conn) return;
+    closingConnection = null;
+    clearTimeout(closingTimer);
+    try { conn.close(); } catch (_) {}
+  }
   function disconnectChat() {
-    if (!connection) return;
+    if (!connection || closingConnection) return;
     const old = connection;
-    const other = old.peer;
-    if (old.open) safeSend({ kind: 'disconnect' });
+    try { if (old.open) old.send({ kind: 'disconnect' }); } catch (_) {}
     connection = null;
-    clearTransfers();
-    clearTimeout(connectingTimeout);
-    setConnectionStatus('Desconectado · conversación finalizada');
-    setStatus(`Has finalizado el chat con ${other}. Puedes volver a conectar.`);
-    // Da tiempo a que el paquete de despedida salga antes de cerrar el canal.
-    setTimeout(() => { try { old.close(); } catch (_) {} }, 180);
+    closingConnection = old;
+    endChatLocally(old.peer);
+    // Preferir ACK del destinatario; si se pierde, cerrar de todos modos.
+    clearTimeout(closingTimer);
+    closingTimer = setTimeout(() => closeFinishedConnection(old), 1600);
   }
   function connectTo(id) {
+    if (closingConnection) { setStatus('Finalizando la conexión anterior. Inténtalo en un momento.'); return; }
     if (!isFiveDigits(id)) { setStatus('Introduce un ID válido de cinco números.'); return; }
     if (id === localId) { setStatus('No puedes conectarte a tu propio ID.'); return; }
     if (!peerReady || !peer || peer.disconnected) { setStatus('Espera a que tu ID esté disponible en la red.'); return; }
