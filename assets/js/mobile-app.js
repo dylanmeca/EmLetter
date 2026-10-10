@@ -100,7 +100,6 @@
     ui.back.addEventListener('click',()=>{
       vibrate();
       if(currentPanel==='design-detail')renderDesignHome();
-      else if(currentPanel==='install-help')renderShare();
       else closeSheet();
     });
     nav.addEventListener('click',event=>{
@@ -155,7 +154,7 @@
     ui.sheet.setAttribute('aria-hidden','false');
     document.body.classList.add('mobile-sheet-open');
     requestAnimationFrame(()=>ui.sheet.classList.add('is-open'));
-    setActiveNav(panel==='design-detail'?'design':panel==='install-help'?'share':panel);
+    setActiveNav(panel==='design-detail'?'design':panel);
     ui.body.scrollTop=0;
   }
 
@@ -325,39 +324,6 @@
     return button;
   }
 
-  function installButton(){
-    const button=make('button','mobile-install-button outline','Instalar EmLetter');
-    button.type='button';
-    button.innerHTML='<span aria-hidden="true">⇩</span> Instalar EmLetter';
-    const refresh=()=>{
-      const pwa=window.EmLetterPWA;
-      const installed=pwa?.isStandalone?.();
-      button.hidden=Boolean(installed);
-      if(!installed)button.disabled=false;
-    };
-    button.addEventListener('click',async()=>{
-      vibrate();
-      const pwa=window.EmLetterPWA;
-      if(!pwa){renderInstallHelp('manual');return}
-      button.disabled=true;
-      try{
-        const result=await pwa.install();
-        if(result?.status==='accepted'||result?.status==='installed'){
-          button.hidden=true;
-          return;
-        }
-        if(result?.status==='dismissed'){button.disabled=false;return}
-        renderInstallHelp(result?.status||'manual');
-      }catch{
-        renderInstallHelp('manual');
-      }finally{button.disabled=false}
-    });
-    window.addEventListener('emletter-install-available',refresh);
-    window.addEventListener('appinstalled',refresh);
-    refresh();
-    return button;
-  }
-
   function renderShare(){
     restoreMoved();
     ui.body.replaceChildren();
@@ -366,7 +332,7 @@
     const preview=make('button','outline','Vista previa');
     preview.type='button';
     preview.addEventListener('click',()=>{closeSheet();$('#preview')?.click()});
-    quickGrid.append(preview,nativeShareButton(),installButton());
+    quickGrid.append(preview,nativeShareButton());
     quick.append(quickGrid);
     ui.body.append(quick);
     const shareRow=$('.share-row');
@@ -374,18 +340,6 @@
     if(shareRow)moveNode(shareRow,ui.body,'mobile-share-row');
     if(shareResult)moveNode(shareResult,ui.body,'mobile-share-result');
     showSheet('Compartir',{panel:'share'});
-  }
-
-  function renderInstallHelp(status='manual'){
-    restoreMoved();
-    ui.body.replaceChildren();
-    const card=make('div','mobile-install-help');
-    const ios=status==='ios'||/iphone|ipad|ipod/i.test(navigator.userAgent);
-    card.innerHTML=ios
-      ? `<div class="mobile-install-glyph">☾</div><h3>Instalar en iPhone</h3><p>En Safari, toca <strong>Compartir</strong> y después <strong>Añadir a pantalla de inicio</strong>. EmLetter se abrirá como una app independiente.</p><div class="mobile-install-steps"><span>1</span><b>Compartir</b><span>2</span><b>Añadir a pantalla de inicio</b></div>`
-      : `<div class="mobile-install-glyph">☾</div><h3>Instalar EmLetter</h3><p>Abre el menú de tu navegador y elige <strong>Instalar app</strong> o <strong>Añadir a pantalla de inicio</strong>.</p>`;
-    ui.body.append(card);
-    showSheet('Instalar app',{back:true,panel:'install-help'});
   }
 
   function openPanel(panel){
