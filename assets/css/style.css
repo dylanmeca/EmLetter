@@ -1061,3 +1061,14 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 .emletter-emoji-empty{grid-column:1/-1;color:#aebbd2;padding:12px;font-size:12px;text-align:center}
 .emletter-emoji-foot{color:#9aa9c5;font-size:11px;padding:0 4px 2px}
 @media(max-width:440px){.emletter-emoji-panel{width:min(308px,calc(100vw - 38px))}.emletter-emoji-grid{grid-template-columns:repeat(7,minmax(0,1fr))}.emletter-context-menu .emletter-emoji-grid button{font-size:22px;height:36px}}
+
+/* Copias independientes de firmas, símbolos y ornamentos: no cubren el lienzo. */
+#edit-paper .emoji-frame .frame-side{pointer-events:auto}
+.paper .free-sticker.free-visual{min-width:0;max-width:none;width:max-content;padding:0;border:0;overflow:visible;white-space:normal}
+.paper .free-sticker.free-visual>.emletter-visual-copy:is(.ornament-symbol,.ornament-line,.end-ornament,.letter-signature,.frame-side){width:max-content!important;max-width:none;margin:0;position:relative;inset:auto}
+.paper .free-sticker.free-visual .emletter-visual-copy{pointer-events:none}
+
+/* Los párrafos liberados conservan todos sus nodos y marcas de Tiptap. */
+#edit-paper #editor .tiptap,#read-paper #read-content{position:relative;isolation:isolate}
+#edit-paper #editor .tiptap>:is(h1,h2,h3,p).emletter-free-block{cursor:text}
+#edit-paper .free-sticker[data-sticker-id]:focus-visible{outline:1px dashed #a6b6e9}
