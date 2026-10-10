@@ -1,0 +1,94 @@
+/* EmLetter · Lector PDF, aislado del CSS del editor y del chat. */
+.pdf-reader-page{--reader-border:#303b52;--reader-muted:#9daac1;max-width:1120px;padding-top:48px;padding-bottom:16px;min-width:0}
+.pdf-reader-page *{box-sizing:border-box}
+.pdf-reader-page [hidden]{display:none!important}
+.pdf-reader-intro{margin-bottom:26px}
+.pdf-reader-intro .eyebrow{color:#8798b5;letter-spacing:2.5px}
+.pdf-reader-intro h1{font-size:clamp(29px,4vw,45px);letter-spacing:-1.2px;margin:10px 0}
+.pdf-reader-intro h1 em{color:#b9c8dc;font-weight:normal}
+.pdf-reader-intro>p:last-child{font:15px/1.65 Inter,'Segoe UI',Arial,sans-serif;color:#a9b6cb;margin:10px 0 0}
+.pdf-reader-card{position:relative;min-width:0;border:1px solid #354158;background:linear-gradient(145deg,#0d1524,#070c18 57%,#0d1321);border-radius:12px;box-shadow:0 20px 60px #0005;overflow:visible;font-family:Inter,'Segoe UI',Arial,sans-serif}
+.pdf-reader-toolbar{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:16px 20px;background:#0e1727;border-radius:12px 12px 0 0;border-bottom:1px solid var(--reader-border)}
+.pdf-reader-file-label{display:flex;align-items:center;gap:13px;min-width:0;flex:1}
+.pdf-reader-file-symbol{display:grid;place-items:center;width:40px;height:40px;flex:none;background:#293348;border:1px solid #50607b;border-radius:9px;color:#cad9ed;font-size:25px}
+.pdf-reader-file-label>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.pdf-reader-file-label strong{color:#ecf1fc;font-size:13px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:560px}
+.pdf-reader-file-label span:not(.pdf-reader-file-symbol){font-size:11px;color:#94a4c0}
+.pdf-reader-top-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.pdf-reader-page button,.pdf-reader-page select{font-family:inherit}
+.pdf-reader-primary,.pdf-reader-quiet,.pdf-reader-controls button{min-height:38px;padding:9px 13px;border:1px solid #41506b;border-radius:7px;background:#1b273b;color:#dbe6f8;font-size:12px;font-weight:650;cursor:pointer;transition:background .14s,border-color .14s;text-decoration:none}
+.pdf-reader-primary{display:inline-flex;align-items:center;gap:8px;border-color:#96acd7;background:#a0b8e7;color:#071327}
+.pdf-reader-primary:hover{background:#c5d4f1;color:#071327}
+.pdf-reader-quiet:hover,.pdf-reader-controls button:hover:not(:disabled){background:#26354e;border-color:#6c84ae}
+.pdf-reader-page button:disabled{opacity:.4;cursor:not-allowed}
+.pdf-reader-visually-hidden{position:absolute!important;height:1px;width:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.pdf-reader-controls{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:10px 18px;background:#0b1423;border-bottom:1px solid var(--reader-border);position:relative;z-index:4}
+.pdf-reader-control-group{display:flex;align-items:center;gap:7px}
+.pdf-reader-controls .pdf-reader-control-group button{height:34px;min-height:34px;min-width:34px;padding:3px 8px;font-size:19px;line-height:1}
+.pdf-reader-controls .pdf-reader-control-group .pdf-reader-zoom-label{min-width:65px;font-size:12px;font-weight:700}
+.pdf-reader-page .pdf-reader-page-counter{font:600 13px/1.2 Inter,'Segoe UI',Arial,sans-serif;color:#e0e9f7;white-space:nowrap;min-width:55px;text-align:center;font-variant-numeric:tabular-nums}
+.pdf-reader-separator{color:#71819f;margin:0 5px}
+.pdf-reader-settings{position:relative;margin-left:auto}
+.pdf-reader-settings summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:8px 10px;background:#192538;color:#d7e2f6;font:600 12px Inter,'Segoe UI',Arial,sans-serif;border:1px solid #40506c;border-radius:7px;min-height:34px;user-select:none}
+.pdf-reader-settings summary::-webkit-details-marker{display:none}
+.pdf-reader-settings[open] summary{border-color:#96acd7}
+.pdf-reader-settings-body{position:absolute;right:0;top:calc(100% + 9px);width:260px;max-width:calc(100vw - 40px);padding:17px;border:1px solid #4a5974;border-radius:10px;background:#101b2e;box-shadow:0 20px 36px #0008;z-index:8;display:flex;flex-direction:column;gap:9px}
+.pdf-reader-settings-body label{font-size:11px;font-weight:700;color:#b4c5df;margin-top:4px}
+.pdf-reader-settings-body select{width:100%;min-height:38px;padding:8px 10px;border:1px solid #455575;border-radius:7px;background:#0a1323;color:#eef3fc;font-size:13px}
+.pdf-reader-rotate-mobile{display:none}
+.pdf-reader-settings-body p{font-size:11px;line-height:1.5;margin:7px 0 0;color:#8799b5}
+.pdf-reader-stage{min-width:0;height:clamp(410px,65vh,720px);position:relative;background:radial-gradient(ellipse at 60% -30%,#414a6416,transparent 65%),#080e19;overflow:hidden}
+.pdf-reader-empty{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;color:#94a4bc}
+.pdf-reader-empty-symbol{width:70px;height:70px;display:grid;place-items:center;border:1px solid #3a4b65;background:#151f32;border-radius:50%;font:37px Georgia,serif;color:#b8c6dd;margin-bottom:19px}
+.pdf-reader-empty h2{font:600 22px/1.35 Georgia,serif;color:#e0e7f4;margin:0 0 9px}
+.pdf-reader-empty p{max-width:375px;font:13px/1.65 Inter,'Segoe UI',Arial,sans-serif;color:#91a1ba;margin:0 0 20px}
+.pdf-reader-scroll{height:100%;width:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-color:#40516e transparent;scrollbar-width:thin;padding:14px;touch-action:pan-x pan-y}
+.pdf-reader-sheet{position:relative;margin:0 auto;background:#fff;isolation:isolate;box-shadow:0 10px 35px #0008}
+.pdf-reader-sheet #pdf-canvas{position:absolute;left:0;top:0;display:block;max-width:none!important;height:auto;transform-origin:center;background:white}
+.pdf-reader-sheet #pdf-canvas.pdf-reader-dark{filter:invert(.94) hue-rotate(180deg) brightness(.84) contrast(1.07)}
+.pdf-reader-text-layer{position:absolute;inset:0;z-index:2;overflow:clip;line-height:1;text-align:initial;text-size-adjust:none;-webkit-text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;pointer-events:auto;user-select:text}
+.pdf-reader-text-layer :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0}
+.pdf-reader-text-layer span{user-select:text;-webkit-user-select:text}
+.pdf-reader-text-layer ::selection{color:transparent;background:#779bc890}
+.pdf-reader-text-layer .markedContent{top:0;height:0}
+.pdf-reader-annotation-layer{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.pdf-reader-annotation-layer a{position:absolute;display:block;pointer-events:auto;border-radius:3px;background:transparent;cursor:pointer}
+.pdf-reader-annotation-layer a:hover,.pdf-reader-annotation-layer a:focus-visible{outline:1px solid #9db4e9;background:#96aad626}
+.pdf-reader-loading,.pdf-reader-drop-overlay{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:13px;background:#090f1ae5;color:#dce8fb;font-size:13px;text-align:center;backdrop-filter:blur(3px)}
+.pdf-reader-drop-overlay{pointer-events:none;z-index:12;background:#101d36ec;border:2px dashed #91addf;inset:12px;border-radius:12px;font-size:20px}
+.pdf-reader-spinner{width:27px;height:27px;border:2px solid #56667d;border-top-color:#a9c0ed;border-radius:50%;animation:pdf-reader-spin .85s linear infinite}
+@keyframes pdf-reader-spin{to{transform:rotate(360deg)}}
+.pdf-reader-error{position:absolute;left:16px;right:16px;bottom:17px;z-index:13;text-align:center;padding:12px 16px;background:#381924;color:#ffdde2;border:1px solid #8b4658;border-radius:8px;font-size:12px}
+.pdf-reader-bottom{display:flex;align-items:center;gap:16px;min-height:52px;padding:11px 18px;background:#0b1423;border-radius:0 0 12px 12px;border-top:1px solid var(--reader-border)}
+.pdf-reader-bottom #pdf-status{font-size:11px;color:#a3b3cb;max-width:55%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex-shrink:0}
+.pdf-reader-bottom input[type=range]{flex:1;accent-color:#a5b9e3;cursor:pointer;min-width:80px}
+.pdf-reader-bottom input:disabled{opacity:.4;cursor:not-allowed}
+.pdf-reader-footer{margin-top:26px}
+.pdf-reader-noscript{color:#b9c9df;text-align:center}
+.pdf-reader-page button:focus-visible,.pdf-reader-page select:focus-visible,.pdf-reader-page a:focus-visible,.pdf-reader-page label[for=pdf-file-input]:focus-visible{outline:2px solid #b5ccff;outline-offset:2px}
+@media(max-width:650px){
+ .pdf-reader-page{padding:25px 13px 10px}
+ .pdf-reader-intro{margin-bottom:19px}
+ .pdf-reader-intro h1{font-size:30px}
+ .pdf-reader-intro>p:last-child{font-size:13px}
+ .pdf-reader-toolbar{padding:11px 12px;gap:8px}
+ .pdf-reader-file-symbol{height:35px;width:35px;font-size:21px}
+ .pdf-reader-file-label{gap:8px}
+ .pdf-reader-file-label strong{font-size:11px;max-width:38vw}
+ .pdf-reader-file-label span:not(.pdf-reader-file-symbol){display:none}
+ .pdf-reader-top-actions{gap:5px}
+ .pdf-reader-primary,.pdf-reader-quiet{padding:8px 9px;min-height:34px;font-size:11px}
+ .pdf-reader-controls{padding:10px 9px;gap:7px;justify-content:space-between}
+ .pdf-reader-control-group{gap:4px}
+ .pdf-reader-controls .pdf-reader-control-group button{min-width:30px;min-height:31px;height:31px}
+ .pdf-reader-settings{margin-left:0}
+ .pdf-reader-settings summary{font-size:11px;min-height:31px;padding:6px}
+ .pdf-reader-rotate{display:none}
+ .pdf-reader-rotate-mobile{display:block;width:100%;min-height:34px;border:1px solid #495e7f;border-radius:7px;background:#1c2b43;color:#dce7f8;font:600 12px Inter,'Segoe UI',Arial,sans-serif;cursor:pointer}
+ .pdf-reader-stage{height:min(65dvh,640px);min-height:390px}
+ .pdf-reader-scroll{padding:9px}
+ .pdf-reader-bottom{padding:10px 12px;gap:10px}
+ .pdf-reader-bottom #pdf-status{max-width:45%;font-size:10px}
+}
+@media(max-width:365px){.pdf-reader-settings summary span:last-child{display:none}.pdf-reader-intro h1{font-size:28px}.pdf-reader-page-counter{min-width:43px!important}.pdf-reader-controls .pdf-reader-control-group .pdf-reader-zoom-label{min-width:56px}}
+@media(prefers-reduced-motion:reduce){.pdf-reader-spinner{animation:none}.pdf-reader-page *{scroll-behavior:auto!important}}
