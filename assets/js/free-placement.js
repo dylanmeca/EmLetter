@@ -171,8 +171,6 @@
     if(options.focus!==false&&el){el.focus();const range=document.createRange();range.selectNodeContents(el);getSelection().removeAllRanges();getSelection().addRange(range)}
     return sticker;
   }
-  document.querySelector('#add-floating-text')?.addEventListener('click',()=>addSticker('Escribe aquí'));
-  document.querySelector('#add-floating-emoji')?.addEventListener('click',()=>addSticker('🖤'));
   function refreshActive(){
     if(!active||active.element.isConnected)return;
     if(active.kind!=='block')return;
@@ -218,16 +216,13 @@
     const list=children(editingPaper),i=list.indexOf(item.element),s=signature(item.element);
     return layout.blocks.find(b=>b.s===s)||layout.blocks.find(b=>b.i===i)||{x:0,y:0};
   }
-  function showHint(text){
-    const el=document.querySelector('#placement-status');
-    if(el){el.textContent=text;el.hidden=false}
-  }
+  // Los avisos de movimiento no se muestran en la interfaz.
+  function showHint(){}
   function begin(item,ev){
     const p=positionFor(item);
     active={...item,index:item.kind==='block'?children(editingPaper).indexOf(item.element):-1,sig:item.kind==='block'?signature(item.element):'',x:p.x,y:p.y,startX:ev.clientX,startY:ev.clientY,originX:p.x,originY:p.y};
     document.body.classList.add('placing-element');
     if(item.kind==='block')paintBlocks();else item.element.classList.add('free-moving');
-    showHint('Moviendo elemento · desplaza el cursor y haz doble clic derecho para fijarlo · Esc para cancelar');
   }
   function finish(commit=true){
     if(!active)return;
@@ -238,27 +233,93 @@
     document.body.classList.remove('placing-element');
     if(commit)persist(current,current.x,current.y);
     else transform(current.element,current.originX,current.originY);
-    showHint('Posición fijada · doble clic derecho en otro elemento para moverlo');
     apply(editingPaper);
   }
   const editor=()=>root?.editor;
   const contextMenu=document.createElement('div');
   contextMenu.className='emletter-context-menu';contextMenu.hidden=true;
   contextMenu.setAttribute('role','menu');contextMenu.setAttribute('aria-label','Acciones del elemento');
-  contextMenu.innerHTML='<button type="button" data-action="duplicate" role="menuitem">Duplicar</button><button type="button" data-action="copy" role="menuitem">Copiar</button><button type="button" data-action="paste" role="menuitem">Pegar</button>';
+  contextMenu.innerHTML=`<div class="emletter-context-actions"><button type="button" data-action="duplicate" role="menuitem">Duplicar</button><button type="button" data-action="copy" role="menuitem">Copiar</button><button type="button" data-action="paste" role="menuitem">Pegar</button><button type="button" data-action="emojis" class="emletter-emoji-switch" role="menuitem" aria-expanded="false">☺ Emojis</button></div><section class="emletter-emoji-panel" hidden aria-label="Selector de emojis"><div class="emletter-emoji-head"><strong>Emojis</strong><button class="emletter-emoji-close" type="button" aria-label="Volver al menú">×</button></div><input class="emletter-emoji-search" type="search" placeholder="Buscar emoji…" aria-label="Buscar emoji"><div class="emletter-emoji-categories" role="group" aria-label="Categorías"></div><div class="emletter-emoji-grid" role="group" aria-label="Emojis disponibles"></div><div class="emletter-emoji-foot">Selecciona un emoji para insertarlo en tu texto.</div></section>`;
   document.body.append(contextMenu);
-  function hideMenu(){clearTimeout(contextTimer);contextMenu.hidden=true;menuTarget=null}
+  function hideMenu(){clearTimeout(contextTimer);contextMenu.hidden=true;menuTarget=null;setEmojiPanel(false)}
   function menuAt(target,ev){
     const clientX=ev.clientX??ev.x??8,clientY=ev.clientY??ev.y??8;
     menuTarget=target;menuPoint={x:clientX,y:clientY};
     contextMenu.querySelector('[data-action="duplicate"]').disabled=!target;
     contextMenu.querySelector('[data-action="copy"]').disabled=!target;
     contextMenu.querySelector('[data-action="paste"]').disabled=!clipboardItem;
+    setEmojiPanel(false);
     contextMenu.hidden=false;
     const w=contextMenu.offsetWidth,h=contextMenu.offsetHeight;
     contextMenu.style.left=Math.max(8,Math.min(innerWidth-w-8,clientX))+'px';
     contextMenu.style.top=Math.max(8,Math.min(innerHeight-h-8,clientY))+'px';
   }
+  // Catálogo sin dependencias externas; se muestra por lotes para mantener la fluidez.
+  const emojiPanel=contextMenu.querySelector('.emletter-emoji-panel');
+  const emojiSearch=contextMenu.querySelector('.emletter-emoji-search');
+  const emojiGrid=contextMenu.querySelector('.emletter-emoji-grid');
+  const emojiCategories=contextMenu.querySelector('.emletter-emoji-categories');
+  const emojiData=Array.isArray(window.EmLetterEmojis)?window.EmLetterEmojis:[];
+  const emojiGroups=[['8','✦','Favoritos'],['0','😊','Caras'],['1','🫶','Personas'],['2','🌹','Naturaleza'],['3','🍓','Comida'],['4','🌎','Viajes'],['5','🎨','Actividades'],['6','💟','Símbolos'],['7','🏳️','Banderas']];
+  const esAlias={amor:'heart',corazon:'heart',corazón:'heart',sonrisa:'smil',risa:'laugh',triste:'sad',llorar:'cry',gato:'cat',perro:'dog',flor:'flower',rosa:'rose',luna:'moon',sol:'sun',murcielago:'bat',murciélago:'bat',fantasma:'ghost',mano:'hand',beso:'kiss',fuego:'fire',estrella:'star',bandera:'flag',comida:'food',fiesta:'party',musica:'music',música:'music',familia:'family',ojos:'eyes',cara:'face',abrazo:'hug',libro:'book'};
+  let emojiGroup='8',emojiFilter=[],emojiCount=0;
+  const emojiNormalize=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for(const [id,glyph,name] of emojiGroups){
+    const btn=document.createElement('button');btn.type='button';btn.textContent=glyph;btn.title=name;btn.setAttribute('aria-label',name);btn.dataset.group=id;emojiCategories.append(btn);
+  }
+  function fitContextMenu(){
+    const w=contextMenu.offsetWidth,h=contextMenu.offsetHeight;
+    const x=menuPoint?.x??8,y=menuPoint?.y??8;
+    contextMenu.style.left=Math.max(8,Math.min(innerWidth-w-8,x))+'px';
+    contextMenu.style.top=Math.max(8,Math.min(innerHeight-h-8,y))+'px';
+  }
+  function appendEmojis(){
+    if(emojiCount>=emojiFilter.length)return;
+    const fragment=document.createDocumentFragment();
+    for(const [glyph,name] of emojiFilter.slice(emojiCount,emojiCount+112)){
+      const btn=document.createElement('button');btn.type='button';btn.textContent=glyph;btn.dataset.emoji=glyph;
+      btn.title=name;btn.setAttribute('aria-label',name);fragment.append(btn);
+    }
+    emojiCount=Math.min(emojiCount+112,emojiFilter.length);
+    emojiGrid.append(fragment);
+  }
+  function filterEmojis(){
+    const text=emojiNormalize(emojiSearch.value.trim());
+    const term=emojiNormalize(esAlias[text]||text);
+    emojiFilter=emojiData.filter(([glyph,name,group])=>(!text||emojiNormalize(name).includes(term)||glyph.includes(text))&&(!emojiGroup||group===emojiGroup||text));
+    emojiCount=0;emojiGrid.replaceChildren();emojiGrid.scrollTop=0;
+    if(!emojiFilter.length){const p=document.createElement('p');p.className='emletter-emoji-empty';p.textContent='No se encontraron emojis.';emojiGrid.append(p)}
+    else appendEmojis();
+    for(const b of emojiCategories.querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.group===emojiGroup));
+  }
+  function setEmojiPanel(visible){
+    emojiPanel.hidden=!visible;
+    contextMenu.querySelector('.emletter-context-actions').hidden=visible;
+    contextMenu.querySelector('[data-action="emojis"]').setAttribute('aria-expanded',String(visible));
+    if(visible){emojiGroup='8';emojiSearch.value='';filterEmojis();requestAnimationFrame(()=>{fitContextMenu();emojiSearch.focus()})}
+  }
+  emojiCategories.addEventListener('click',ev=>{
+    const b=ev.target.closest('button[data-group]');if(!b)return;
+    emojiGroup=b.dataset.group;emojiSearch.value='';filterEmojis();
+  });
+  emojiSearch.addEventListener('input',()=>{emojiGroup='';filterEmojis()});
+  emojiGrid.addEventListener('scroll',()=>{if(emojiGrid.scrollTop+emojiGrid.clientHeight>=emojiGrid.scrollHeight-75)appendEmojis()},{passive:true});
+  emojiPanel.querySelector('.emletter-emoji-close').addEventListener('click',()=>{setEmojiPanel(false);fitContextMenu()});
+  emojiGrid.addEventListener('click',ev=>{
+    const b=ev.target.closest('button[data-emoji]');if(!b)return;
+    const glyph=b.dataset.emoji,target=menuTarget;
+    if(target?.kind==='sticker'){
+      const sticker=layout.stickers.find(s=>s.id===target.key);
+      if(sticker){sticker.text=(sticker.text+glyph).slice(0,2000);renderStickers(editingPaper);changed()}
+    }else{
+      const ed=editor();if(ed){
+        const at=ed.view.posAtCoords({left:menuPoint?.x||0,top:menuPoint?.y||0});
+        const point=at?.pos??ed.state.selection.from;
+        ed.chain().focus().insertContentAt(point,glyph).run();
+      }
+    }
+    hideMenu();
+  });
   const pointOnPaper=point=>{
     const r=editingPaper.getBoundingClientRect();
     return {x:clamp(point.x-r.left),y:clamp(point.y-r.top)};
@@ -299,6 +360,7 @@
   contextMenu.addEventListener('click',ev=>{
     const button=ev.target.closest('button[data-action]');if(!button||button.disabled)return;
     const action=button.dataset.action,target=menuTarget,point=menuPoint;
+    if(action==='emojis'){setEmojiPanel(true);return}
     if(action==='copy'||action==='duplicate'){
       const selection=getSelection();
       const selected=selection?.toString()||'';
@@ -336,50 +398,36 @@
     }
     return null;
   }
-  // Doble clic izquierdo sobre texto: lo convierte en un elemento libre.
-  // Si el objetivo es un emoji, sólo separa ese emoji del resto del párrafo.
+  // Doble clic izquierdo: mover el contenido REAL de Tiptap, conservando
+  // marcas, tipografía, colores, enlaces y edición normal (no se duplica).
+  // Un emoji dentro de un párrafo sí puede extraerse de manera independiente.
   editingPaper.addEventListener('dblclick',ev=>{
     if(ev.button!==0||active)return;
     const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
     if(!source)return;
     const item=getTarget(source);
-    if(item?.kind==='sticker'){
-      ev.preventDefault();begin(item,ev);return;
-    }
+    if(item?.kind==='sticker'){ev.preventDefault();begin(item,ev);return}
     const block=source.closest('#editor .tiptap p,#editor .tiptap h1,#editor .tiptap h2,#editor .tiptap h3');
     if(!block||!root?.contains(block))return;
     const ed=editor(),info=nodeAtElement(block);
     if(!ed||!info||!['paragraph','heading'].includes(info.node.type.name))return;
-    const text=info.node.textContent;
-    if(!text||text.length>2000){showHint('Este bloque es demasiado largo para convertirlo en texto libre.');return}
-    if(layout.stickers.length>=80){showHint('Has alcanzado el máximo de textos libres.');return}
     const emoji=emojiAtPoint(block,ed,ev.clientX,ev.clientY);
-    const rect=block.getBoundingClientRect(),style=computedTextStyle(source);
-    const point=pointOnPaper({x:emoji?ev.clientX:rect.left,y:emoji?ev.clientY:rect.top});
     if(emoji){
+      if(layout.stickers.length>=80)return;
+      const style=computedTextStyle(source);
+      const point=pointOnPaper({x:ev.clientX,y:ev.clientY});
       ev.preventDefault();
       if(ed.commands.deleteRange({from:emoji.from,to:emoji.to})){
         const created=addSticker(emoji.text,{...point,style,focus:false});
         if(created){
-          const el=editingPaper.querySelector(`[data-sticker-id="${created.id}"]`);
-          if(el)begin({kind:'sticker',key:created.id,element:el},ev);
-          showHint('Emoji libre: mueve el cursor y haz doble clic derecho para fijarlo.');
+          const element=editingPaper.querySelector(`[data-sticker-id="${created.id}"]`);
+          if(element)begin({kind:'sticker',key:created.id,element},ev);
         }
       }
       return;
     }
-    // El párrafo se retira del documento, para evitar mostrarlo dos veces.
-    ev.preventDefault();
-    const original=info.node.toJSON();
-    const originalIndex=children(editingPaper).indexOf(block),originalSignature=signature(block);
-    const deleted=ed.commands.deleteRange({from:info.pos,to:info.pos+info.node.nodeSize});
-    if(!deleted)return;
-    layout.blocks=layout.blocks.filter(b=>b.i!==originalIndex&&b.s!==originalSignature);
-    const created=addSticker(text,{...point,style,focus:false});
-    if(!created){ed.commands.insertContentAt(info.pos,original);return}
-    const element=editingPaper.querySelector(`[data-sticker-id="${created.id}"]`);
-    if(element){begin({kind:'sticker',key:created.id,element},{clientX:ev.clientX,clientY:ev.clientY});}
-    showHint('Texto libre: mueve el cursor y haz doble clic derecho para fijarlo.');
+    // El bloque sigue siendo editable con todos sus estilos y fuentes.
+    if(item?.kind==='block'){ev.preventDefault();begin(item,ev)}
   });
   editingPaper.addEventListener('contextmenu',event=>{
     const item=getTarget(event.target);
