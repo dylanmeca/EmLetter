@@ -1,0 +1,83 @@
+/* Tutorial de EmLetter · complemento al estilo de la política de privacidad */
+.tutorial-page{max-width:1280px;padding:35px clamp(16px,3.5vw,44px) 0}
+.tutorial-grid{display:grid;grid-template-columns:minmax(0,1fr) 285px;align-items:start;gap:26px}
+.tutorial-card{min-width:0;padding:clamp(27px,4.5vw,54px)}
+.tutorial-card h1{font-size:clamp(33px,3.8vw,49px);line-height:1.2;letter-spacing:-1.3px;max-width:670px}
+.tutorial-card h1 em{color:#c5d5f6;font-style:italic}
+.tutorial-card .eyebrow{color:#abbfe4;margin-bottom:17px}
+.tutorial-card .tutorial-lead{font-size:16px;line-height:1.85;color:#b7c7e0;max-width:710px;margin:19px 0 23px}
+.tutorial-card a{color:#bbd2fa;text-underline-offset:3px}
+.tutorial-card a:hover{color:#eaf1ff}
+.tutorial-quick-actions,.tutorial-end-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.tutorial-quick-actions{padding:2px 0 22px}
+.tutorial-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #6884b2;border-radius:7px;min-height:43px;padding:10px 17px;font-size:13px;font-weight:700;text-decoration:none!important;transition:background .18s,border-color .18s}
+.tutorial-action-primary{background:#b5c8eb;color:#08152d!important;border-color:#b5c8eb}
+.tutorial-action-primary:hover{background:#dae5fb;color:#061228!important;border-color:#dae5fb}
+.tutorial-action-outline{background:#101e38;color:#e6eeff!important;border-color:#637eae}
+.tutorial-action-outline:hover{background:#263a5b;border-color:#a4bae3}
+.tutorial-section{border-top:1px solid #283752;padding-top:7px;margin-top:26px}
+.tutorial-card .tutorial-section h2{font:normal clamp(23px,2.6vw,28px)/1.35 Georgia,serif;color:#e7eefa;display:flex;align-items:center;gap:13px;margin:27px 0 17px}
+.tutorial-section h2>span{font:700 11px/1 Arial,sans-serif;color:#aec6ee;letter-spacing:.08em;background:#172642;border:1px solid #364d73;border-radius:5px;padding:8px 7px}
+.tutorial-card h3{font:600 17px/1.4 Arial,sans-serif;color:#e0eaff;margin:27px 0 8px;scroll-margin-top:25px}
+.tutorial-section h2{scroll-margin-top:25px}
+.tutorial-card .tutorial-section p{margin:0 0 16px;font-size:14px;line-height:1.85;color:#becce3}
+.tutorial-card code{display:inline-block;padding:2px 6px;border-radius:4px;border:1px solid #405072;background:#131f38;color:#d7bfe9;font-size:.9em}
+.tutorial-tip{display:flex;gap:13px;align-items:flex-start;margin:18px 0 23px;padding:15px 17px;border:1px solid #465879;border-left:3px solid #b2c6e8;border-radius:6px;background:#11203b}
+.tutorial-tip strong{color:#e1eafb;white-space:nowrap;font-size:12px}
+.tutorial-tip span{color:#b9c8e2;font-size:13px;line-height:1.6}
+.tutorial-end-actions{margin-top:32px;padding-top:24px;border-top:1px solid #293953}
+.tutorial-card .tutorial-end-actions p{margin:0 5px 0 0;font:italic 18px Georgia,serif;color:#e4ecff}
+.tutorial-back{margin-left:auto;font-size:13px}
+
+/* Navegación lateral; <details> permite plegarla sin JavaScript. */
+.tutorial-aside{min-width:0;position:sticky;top:22px}
+.tutorial-toc{border:1px solid #34445f;background:#0c1730;border-radius:8px;box-shadow:0 12px 34px #0003;overflow:hidden}
+.tutorial-toc-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 16px;background:#24324a;color:#f1f4fc;cursor:pointer;list-style:none;font-size:14px;font-weight:700}
+.tutorial-toc-heading::-webkit-details-marker,.tutorial-toc-group summary::-webkit-details-marker{display:none}
+.tutorial-toc-heading-label{display:flex;align-items:center;gap:11px}
+.tutorial-toc-icon{display:inline-grid;place-items:center;font-size:18px;width:19px;height:19px;color:#cfddf9}
+.tutorial-chevron{display:inline-block;width:9px;height:9px;border-right:2px solid #c6d4ef;border-bottom:2px solid #c6d4ef;transform:rotate(45deg);transition:transform .15s;flex:none;margin-right:4px;margin-top:-4px}
+.tutorial-toc[open]>.tutorial-toc-heading .tutorial-chevron{transform:rotate(225deg);margin-top:4px}
+.tutorial-toc-nav{padding:6px 0 8px}
+.tutorial-toc-group{border-bottom:1px solid #24334e}
+.tutorial-toc-group>summary{cursor:pointer;list-style:none;padding:12px 16px;display:flex;align-items:center;gap:9px;color:#dbe5f9;font-size:12px;line-height:1.5;font-weight:700}
+.tutorial-toc-group>summary:before{content:'+';font:700 17px/1 Arial,sans-serif;color:#9eb8e6;width:13px;flex:none}
+.tutorial-toc-group[open]>summary:before{content:'−'}
+.tutorial-toc-group>summary:hover,.tutorial-toc-nav a:hover{background:#202e4a;color:#f3f7ff}
+.tutorial-toc-nav ul{list-style:none;margin:0 0 6px;padding:0}
+.tutorial-toc-nav li{margin:0;padding:0}
+.tutorial-toc-nav li a{display:block;padding:9px 13px 9px 38px;text-decoration:none;font-size:12px;line-height:1.4;color:#aebedb;border-left:2px solid transparent}
+.tutorial-toc-nav li a:hover,.tutorial-toc-nav li a:focus-visible{border-left-color:#a8c3f2}
+.tutorial-toc-top{display:block;padding:13px 16px 6px;color:#b7cdf2;text-decoration:none;font-size:12px}
+.tutorial-toc summary:focus-visible{outline:2px solid #ccdafa;outline-offset:-3px}
+.tutorial-footer{border-top:1px solid #2b3b56;margin-top:32px;padding:23px 3px 28px;display:flex;justify-content:space-between;gap:14px;align-items:center;color:#9daecc;font-size:11px;letter-spacing:.1em}
+.tutorial-footer a{font-size:12px;letter-spacing:normal;color:#c5d7f4;text-decoration:none}
+.tutorial-footer a:hover{text-decoration:underline}
+
+@media(max-width:860px){
+  .tutorial-page{padding:23px 17px 0}
+  .tutorial-grid{grid-template-columns:minmax(0,1fr);gap:16px}
+  .tutorial-aside{position:static;order:-1}
+  .tutorial-card{padding:clamp(24px,5vw,40px)}
+  .tutorial-toc{border-radius:9px}
+  .tutorial-toc-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:1px solid #34445f}
+  .tutorial-toc-top{align-self:end}
+}
+@media(max-width:570px){
+  .tutorial-page{padding:15px 13px 0}
+  .tutorial-card{padding:24px 18px}
+  .tutorial-card h1{font-size:33px}
+  .tutorial-card .tutorial-lead{font-size:14px}
+  .tutorial-toc-nav{display:block}
+  .tutorial-toc-group>summary{min-height:43px}
+  .tutorial-toc-heading{min-height:50px}
+  .tutorial-tip{flex-direction:column;gap:5px}
+  .tutorial-quick-actions{gap:9px}
+  .tutorial-action{width:100%}
+  .tutorial-end-actions{flex-direction:column;align-items:flex-start}
+  .tutorial-back{margin-left:0}
+  .tutorial-footer{flex-direction:column;align-items:center;text-align:center;line-height:1.6}
+}
+@media(prefers-reduced-motion:reduce){
+  .tutorial-action,.tutorial-chevron{transition:none}
+}
