@@ -1,0 +1,101 @@
+---
+layout: default
+title: Lector PDF · EmLetter
+description: Lee documentos PDF en EmLetter, con modo oscuro, zoom y navegación sin subir los archivos a un servidor.
+permalink: /lectorpdf.html
+pdf_reader_page: true
+---
+<main class="pdf-reader-page" id="contenido">
+  <section class="pdf-reader-intro">
+    <p class="eyebrow">EMLETTER · UN ESPACIO PARA LEER</p>
+    <h1>Cada página, a tu <em>ritmo.</em></h1>
+    <p>Abre un PDF y léelo con comodidad, sin salir de EmLetter.</p>
+  </section>
+
+  <section class="pdf-reader-card" aria-label="Lector de documentos PDF">
+    <header class="pdf-reader-toolbar">
+      <div class="pdf-reader-file-label">
+        <span class="pdf-reader-file-symbol" aria-hidden="true">▤</span>
+        <div>
+          <strong id="pdf-document-name">Ningún documento abierto</strong>
+          <span id="pdf-document-detail">Tus archivos se procesan en tu navegador</span>
+        </div>
+      </div>
+      <div class="pdf-reader-top-actions">
+        <label class="pdf-reader-primary pdf-reader-open" for="pdf-file-input">
+          <span aria-hidden="true">＋</span> Abrir PDF
+        </label>
+        <input type="file" id="pdf-file-input" accept=".pdf,application/pdf" class="pdf-reader-visually-hidden">
+        <button type="button" id="pdf-close" class="pdf-reader-quiet" disabled>Cerrar</button>
+      </div>
+    </header>
+
+    <div class="pdf-reader-controls" aria-label="Herramientas de lectura">
+      <div class="pdf-reader-control-group">
+        <button type="button" id="pdf-prev" aria-label="Página anterior" title="Página anterior" disabled>‹</button>
+        <span class="pdf-reader-page-counter"><span id="pdf-current">0</span><span class="pdf-reader-separator">/</span><span id="pdf-total">0</span></span>
+        <button type="button" id="pdf-next" aria-label="Página siguiente" title="Página siguiente" disabled>›</button>
+      </div>
+      <div class="pdf-reader-control-group pdf-reader-zoom">
+        <button type="button" id="pdf-zoom-out" aria-label="Alejar" title="Alejar" disabled>−</button>
+        <button type="button" id="pdf-zoom-reset" class="pdf-reader-zoom-label" title="Restablecer zoom" disabled>100%</button>
+        <button type="button" id="pdf-zoom-in" aria-label="Ampliar" title="Ampliar" disabled>+</button>
+      </div>
+      <div class="pdf-reader-control-group pdf-reader-rotate">
+        <button type="button" id="pdf-rotate" title="Girar 90 grados" aria-label="Girar página" disabled>↻</button>
+      </div>
+      <details id="pdf-preferences" class="pdf-reader-settings">
+        <summary aria-label="Ajustes del lector" title="Ajustes del lector"><span aria-hidden="true">⚙</span> <span>Ajustes</span></summary>
+        <div class="pdf-reader-settings-body">
+          <label for="pdf-theme">Apariencia del documento</label>
+          <select id="pdf-theme">
+            <option value="auto">Oscuro automático</option>
+            <option value="original">Original</option>
+            <option value="dark">Oscuro siempre</option>
+          </select>
+          <label for="pdf-fit">Ajuste de página</label>
+          <select id="pdf-fit">
+            <option value="width">Ajustar al ancho</option>
+            <option value="page">Ver página completa</option>
+          </select>
+          <button type="button" id="pdf-rotate-mobile" class="pdf-reader-rotate-mobile" disabled>↻ Girar página</button>
+          <p>La apariencia oscura modifica la visualización, no el archivo original.</p>
+        </div>
+      </details>
+    </div>
+
+    <div id="pdf-reader-stage" class="pdf-reader-stage" aria-label="Área de lectura PDF">
+      <div id="pdf-empty" class="pdf-reader-empty">
+        <span class="pdf-reader-empty-symbol" aria-hidden="true">☾</span>
+        <h2>Tu próxima lectura empieza aquí.</h2>
+        <p>Selecciona un PDF o arrástralo a este espacio. Permanecerá en tu dispositivo.</p>
+        <label for="pdf-file-input" class="pdf-reader-primary pdf-reader-empty-action">Elegir un documento <span aria-hidden="true">↗</span></label>
+      </div>
+      <div id="pdf-scroll" class="pdf-reader-scroll" hidden>
+        <div id="pdf-sheet" class="pdf-reader-sheet">
+          <canvas id="pdf-canvas" aria-label="Página del PDF"></canvas>
+          <div id="pdf-text-layer" class="pdf-reader-text-layer textLayer"></div>
+          <div id="pdf-annotation-layer" class="pdf-reader-annotation-layer"></div>
+        </div>
+      </div>
+      <div id="pdf-loading" class="pdf-reader-loading" role="status" aria-live="polite" hidden>
+        <span class="pdf-reader-spinner" aria-hidden="true"></span>
+        <span id="pdf-loading-text">Preparando documento…</span>
+      </div>
+      <div id="pdf-error" class="pdf-reader-error" role="alert" hidden></div>
+      <div id="pdf-drop" class="pdf-reader-drop-overlay" aria-hidden="true" hidden>Suelta aquí tu PDF</div>
+    </div>
+
+    <div class="pdf-reader-bottom">
+      <span id="pdf-status" role="status" aria-live="polite">Listo para abrir un PDF</span>
+      <label for="pdf-page-range" class="pdf-reader-visually-hidden">Navegación de páginas</label>
+      <input type="range" id="pdf-page-range" min="1" max="1" value="1" disabled>
+    </div>
+  </section>
+
+  <footer class="bottom-note pdf-reader-footer">
+    <span>© {{ site.time | date: '%Y' }} Dylan Meca</span>
+    <a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a>
+  </footer>
+</main>
+<noscript><p class="pdf-reader-noscript">Activa JavaScript para abrir documentos PDF.</p></noscript>
