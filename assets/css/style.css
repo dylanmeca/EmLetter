@@ -1118,3 +1118,29 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 #composer .toolbar #add-floating-text,#composer .toolbar #add-floating-emoji{font:600 13px Arial,sans-serif;min-height:36px;height:auto;padding:7px 11px;white-space:nowrap;background:#25314e;color:#e9e2f7;border:1px solid #68759b;border-radius:7px}
 #composer .toolbar #add-floating-text:hover,#composer .toolbar #add-floating-emoji:hover{background:#334465;border-color:#a8bce8}
 body.mobile-native .mobile-insert-grid #add-floating-text,body.mobile-native .mobile-insert-grid #add-floating-emoji{font:600 12px Arial,sans-serif;white-space:normal;line-height:1.35;color:#edf1fe;background:#23314c;border:1px solid #65799f}
+
+/* EmLetter: footer de aplicación, plegado por defecto en móvil. */
+.mobile-footer-toggle{display:none}
+@media (max-width:760px){
+  body.mobile-native #composer{overflow-x:clip}
+  body.mobile-native .paper-wrap{overflow-x:clip}
+  body.mobile-native #edit-paper{max-width:100%;min-width:0}
+  body.mobile-native #editor .tiptap{min-width:0;max-width:100%}
+  body.mobile-native #edit-paper .free-sticker{max-width:min(80%,calc(100% - 16px));overflow-wrap:anywhere}
+  body.mobile-native.placing-element #edit-paper,
+  body.mobile-native.placing-element #edit-paper *{touch-action:none!important}
+  body.mobile-native #composer>.mobile-footer-toggle{
+    display:flex;align-items:center;justify-content:center;
+    width:44px;height:31px;min-height:31px;
+    padding:0;margin:10px auto 12px;border:1px solid #8095c044;
+    border-radius:999px;background:#101a30;color:#c6d5fa;
+    font:500 27px/1 Georgia,serif;
+    box-shadow:0 4px 15px #0004;
+    transition:background .15s ease;
+  }
+  body.mobile-native #composer>.mobile-footer-toggle:focus-visible{outline:2px solid #aec3f1}
+  body.mobile-native #composer>.mobile-footer-toggle span{display:block;transform:rotate(0deg);transition:transform .15s ease}
+  body.mobile-native #composer.mobile-footer-expanded>.mobile-footer-toggle span{transform:rotate(90deg)}
+  body.mobile-native #composer>.bottom-note{display:none!important}
+  body.mobile-native #composer.mobile-footer-expanded>.bottom-note{display:flex!important}
+}
