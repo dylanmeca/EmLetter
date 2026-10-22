@@ -60,6 +60,11 @@ adsense_slot_keys: [pdf_bottom]
             <option value="original">Original</option>
             <option value="dark">Oscuro siempre</option>
           </select>
+          <div class="pdf-reader-ocr-preference">
+            <label for="pdf-ocr-enabled">Reconocimiento de texto (OCR)</label>
+            <input type="checkbox" id="pdf-ocr-enabled" checked aria-describedby="pdf-ocr-help">
+          </div>
+          <p id="pdf-ocr-help" class="pdf-reader-ocr-help">Activado: reconoce el texto antes de mostrar el PDF. Desactivado: abre el documento directamente, sin OCR.</p>
           <label for="pdf-fit">Ajuste de página</label>
           <select id="pdf-fit">
             <option value="width">Ajustar al ancho</option>
