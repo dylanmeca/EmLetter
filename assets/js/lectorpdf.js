@@ -5,6 +5,12 @@
   const PDFJS_VERSION = "6.3.289";
   const PDFJS_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.mjs`;
   const PDFJS_WORKER = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.mjs`;
+  // OCR en el propio navegador: se descargan motor y diccionarios, NO se sube el PDF.
+  const OCR_VERSION = "7.0.0";
+  const OCR_SCRIPT = `https://cdn.jsdelivr.net/npm/tesseract.js@${OCR_VERSION}/dist/tesseract.min.js`;
+  const OCR_WORKER = `https://cdn.jsdelivr.net/npm/tesseract.js@${OCR_VERSION}/dist/worker.min.js`;
+  const OCR_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@6.1.2";
+  const OCR_LANG = "https://tessdata.projectnaptha.com/4.0.0";
   const $ = (id) => document.getElementById(id);
   const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
   const elements = {
@@ -19,7 +25,7 @@
     fullscreen: $("pdf-fullscreen-toggle"), fullscreenLabel: $("pdf-fullscreen-label"),
     fullscreenIcon: $("pdf-fullscreen-icon"),
     stage: $("pdf-reader-stage"), empty: $("pdf-empty"), scroll: $("pdf-scroll"),
-    sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"),
+    sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"), ocrLayer: $("pdf-ocr-layer"), ocrProgress: $("pdf-ocr-progress"),
     annotations: $("pdf-annotation-layer"), redactions: $("pdf-redaction-layer"),
     redactToggle: $("pdf-redaction-toggle"), redactDownload: $("pdf-redaction-download"), loading: $("pdf-loading"),
     loadingText: $("pdf-loading-text"), error: $("pdf-error"), status: $("pdf-status"), drop: $("pdf-drop"),
@@ -61,7 +67,7 @@
     revision: 0, loadingRevision: 0, errorTimer: null, resizeTimer: null, dragDepth: 0,
     fallbackFullscreen: false, previousBodyOverflow: "",
     viewport: null, redactionMode: false, redactionBoxes: new Map(), drawing: null,
-    exporting: false, exportLibPromise: null,
+    exporting: false, exportLibPromise: null, ocrJob: null, viewportPage: 0,
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -125,9 +131,11 @@
     state.renderTask = null;
     state.textTask = null;
     elements.text.replaceChildren();
+    elements.ocrLayer.replaceChildren();
     elements.annotations.replaceChildren();
     elements.redactions.replaceChildren();
     state.viewport = null;
+    state.viewportPage = 0;
     state.drawing = null;
   }
 
@@ -210,6 +218,7 @@
   syncFullscreenControl();
 
   async function discardDocument() {
+    cancelOcr();
     stopRender();
     const previous = state.pdf;
     state.pdf = null;
@@ -226,6 +235,7 @@
     elements.name.textContent = "Ningún documento abierto";
     elements.name.removeAttribute("title");
     elements.detail.textContent = "Tus archivos se procesan en tu navegador";
+    elements.ocrProgress.hidden = true;
     elements.settings.open = false;
     updateUI();
     if (previous) {
@@ -272,6 +282,236 @@
     } catch (error) {
       if (error?.name !== "AbortException") console.warn("EmLetter: no se pudo seleccionar texto de esta página.", error);
     }
+  }
+
+  // Un único motor OCR por documento. Se procesan todas las páginas una a una,
+  // empezando por la visible; así los PDFs grandes no saturan RAM ni bloquean la lectura.
+  let ocrScriptPromise = null;
+  function loadOcrLibrary() {
+    if (window.Tesseract?.createWorker) return Promise.resolve(window.Tesseract);
+    if (!ocrScriptPromise) {
+      ocrScriptPromise = new Promise((resolve, reject) => {
+        const tag = document.createElement("script");
+        tag.src = OCR_SCRIPT;
+        tag.async = true;
+        tag.onload = () => window.Tesseract?.createWorker
+          ? resolve(window.Tesseract)
+          : reject(new Error("El motor OCR no está disponible."));
+        tag.onerror = () => reject(new Error("No se pudo descargar el motor OCR."));
+        document.head.appendChild(tag);
+      }).catch((error) => { ocrScriptPromise = null; throw error; });
+    }
+    return ocrScriptPromise;
+  }
+
+  function ocrCurrent(job) {
+    return !!job && state.ocrJob === job && state.pdf === job.pdf && !job.cancelled;
+  }
+
+  function cancelOcr() {
+    const job = state.ocrJob;
+    state.ocrJob = null;
+    if (!job) return;
+    job.cancelled = true;
+    job.worker?.terminate().catch(() => {});
+  }
+
+  function updateOcrProgress(job) {
+    if (!ocrCurrent(job)) return;
+    const done = job.pages.size;
+    elements.ocrProgress.hidden = false;
+    elements.ocrProgress.textContent = job.failed
+      ? "OCR no disponible"
+      : done === job.pdf.numPages
+        ? `OCR listo · ${done}/${job.pdf.numPages}`
+        : `OCR · ${done}/${job.pdf.numPages}`;
+    elements.ocrProgress.title = job.failed
+      ? "Comprueba tu conexión. El texto integrado del PDF sigue disponible."
+      : `Reconocimiento local en español e inglés: ${done} de ${job.pdf.numPages} páginas`;
+  }
+
+  function prioritizeOcr(pageNumber) {
+    const job = state.ocrJob;
+    if (!ocrCurrent(job) || job.pages.has(pageNumber)) return;
+    job.priority = [pageNumber, ...job.priority.filter((n) => n !== pageNumber)];
+  }
+
+  function ocrStatusForPage() {
+    if (!state.pdf || state.redactionMode) return;
+    const native = elements.text.textContent.trim().length >= 12;
+    if (native) return; // La capa original de PDF.js permanece seleccionable.
+    const job = state.ocrJob;
+    if (!ocrCurrent(job)) return;
+    const result = job.pages.get(state.page);
+    if (result) {
+      setStatus(result.words.length
+        ? "Texto OCR listo: puedes seleccionar y copiar las palabras"
+        : "No se detectó texto legible en esta página; puedes censurar arrastrando el lápiz");
+    } else if (job.failed) {
+      setStatus("OCR no disponible: comprueba tu conexión; aún puedes censurar por áreas");
+    } else {
+      setStatus("Reconociendo texto (OCR)… puedes leer mientras se procesa");
+    }
+  }
+
+  // Capa invisible de texto seleccionable alineada con las cajas OCR. Las coordenadas
+  // se guardan en puntos PDF: no se pierden al cambiar zoom, ajustar o girar la página.
+  function paintOcrText() {
+    elements.ocrLayer.replaceChildren();
+    if (!state.pdf || !state.viewport || state.viewportPage !== state.page) return;
+    const result = state.ocrJob?.pages.get(state.page);
+    if (!result?.words?.length) return;
+    const viewport = state.viewport;
+    const pageWidth = elements.sheet.clientWidth;
+    const pageHeight = elements.sheet.clientHeight;
+    const sx = pageWidth / viewport.width;
+    const sy = pageHeight / viewport.height;
+    const delta = ((viewport.rotation - result.rotation) % 360 + 360) % 360;
+    elements.ocrLayer.style.width = `${pageWidth}px`;
+    elements.ocrLayer.style.height = `${pageHeight}px`;
+    // Se omiten palabras duplicadas si PDF.js ya ofrece texto seleccionable.
+    const nativeBounds = [...elements.text.querySelectorAll("span")]
+      .filter((node) => node.textContent.trim())
+      .map((node) => node.getBoundingClientRect());
+    const sheetBounds = elements.sheet.getBoundingClientRect();
+    const measuring = document.createElement("canvas").getContext("2d");
+    const fragment = document.createDocumentFragment();
+    for (const word of result.words) {
+      const r = viewport.convertToViewportRectangle(word.box);
+      const left = Math.min(r[0], r[2]) * sx;
+      const top = Math.min(r[1], r[3]) * sy;
+      const width = Math.abs(r[2] - r[0]) * sx;
+      const height = Math.abs(r[3] - r[1]) * sy;
+      if (width < 2 || height < 2) continue;
+      const screen = { left: sheetBounds.left + left, top: sheetBounds.top + top,
+        right: sheetBounds.left + left + width, bottom: sheetBounds.top + top + height };
+      // Se compara área de intersección, no solo proximidad: un PDF mixto puede
+      // combinar párrafos nativos con imágenes escaneadas en una misma página.
+      const duplicated = nativeBounds.some((rect) => {
+        const w = Math.max(0, Math.min(screen.right, rect.right) - Math.max(screen.left, rect.left));
+        const h = Math.max(0, Math.min(screen.bottom, rect.bottom) - Math.max(screen.top, rect.top));
+        return w * h > width * height * .48;
+      });
+      if (duplicated) continue;
+      const vertical = delta === 90 || delta === 270;
+      const lineLength = vertical ? height : width;
+      const letterHeight = Math.max(3, vertical ? width : height);
+      const fontSize = Math.max(4, letterHeight * .87);
+      const span = document.createElement("span");
+      span.className = "pdf-reader-ocr-word";
+      span.textContent = word.text + " ";
+      span.style.fontSize = `${fontSize}px`;
+      span.style.lineHeight = "1";
+      measuring.font = `${fontSize}px Arial, sans-serif`;
+      const measured = measuring.measureText(word.text + " ").width || lineLength;
+      const stretch = clamp(lineLength / measured, .2, 5);
+      let x = left;
+      let y = top;
+      if (delta === 90) x += width;
+      if (delta === 180) { x += width; y += height; }
+      if (delta === 270) y += height;
+      span.style.left = `${x}px`;
+      span.style.top = `${y}px`;
+      span.style.transform = `rotate(${delta}deg) scaleX(${stretch})`;
+      fragment.appendChild(span);
+    }
+    elements.ocrLayer.appendChild(fragment);
+  }
+
+  // Output `blocks` en Tesseract.js 7 (desactivado por defecto). Extraer palabras
+  // y convertir píxeles del bitmap de entrada a coordenadas PDF originales.
+  function collectOcrWords(data, viewport, width, height) {
+    const words = [];
+    const blocks = Array.isArray(data.blocks) ? data.blocks : [];
+    for (const block of blocks) for (const paragraph of block.paragraphs || [])
+      for (const line of paragraph.lines || []) for (const word of line.words || []) {
+        const text = String(word.text || "").trim();
+        const b = word.bbox;
+        if (!text || !b || ![b.x0, b.y0, b.x1, b.y1].every(Number.isFinite)) continue;
+        if (b.x1 - b.x0 < 1 || b.y1 - b.y0 < 1) continue;
+        // El lienzo puede redondear 1 px las medidas de getViewport.
+        const a = viewport.convertToPdfPoint(b.x0 * viewport.width / width, b.y0 * viewport.height / height);
+        const z = viewport.convertToPdfPoint(b.x1 * viewport.width / width, b.y1 * viewport.height / height);
+        words.push({ text, box: [Math.min(a[0], z[0]), Math.min(a[1], z[1]), Math.max(a[0], z[0]), Math.max(a[1], z[1])] });
+      }
+    return words;
+  }
+
+  async function scanOcrPage(job, number) {
+    const page = await job.pdf.getPage(number);
+    if (!ocrCurrent(job)) return null;
+    const base = page.getViewport({ scale: 1, rotation: page.rotate });
+    const scale = Math.min(3.5, 2200 / Math.max(base.width, base.height),
+      Math.sqrt(4400000 / (base.width * base.height)));
+    const viewport = page.getViewport({ scale, rotation: page.rotate });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(viewport.width));
+    canvas.height = Math.max(1, Math.ceil(viewport.height));
+    try {
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("No se pudo generar el lienzo OCR.");
+      const rendering = page.render({ canvasContext: context, viewport, background: "#ffffff" });
+      await rendering.promise;
+      if (!ocrCurrent(job)) return null;
+      const { data } = await job.worker.recognize(canvas, {}, { blocks: true, text: true });
+      if (!ocrCurrent(job)) return null;
+      return { rotation: viewport.rotation,
+        words: collectOcrWords(data, viewport, canvas.width, canvas.height) };
+    } finally {
+      canvas.width = canvas.height = 0; // liberar memoria de bitmap tras cada página
+      // No limpiar los recursos de PDF.js mientras el visor podría usarlos.
+    }
+  }
+
+  async function runOcr(job) {
+    try {
+      const engine = await loadOcrLibrary();
+      if (!ocrCurrent(job)) return;
+      job.worker = await engine.createWorker(["spa", "eng"], 1, {
+        workerPath: OCR_WORKER, corePath: OCR_CORE, langPath: OCR_LANG,
+      });
+      if (!ocrCurrent(job)) return;
+      while (ocrCurrent(job) && job.pages.size < job.pdf.numPages) {
+        let number = job.priority.shift();
+        while (number && job.pages.has(number)) number = job.priority.shift();
+        if (!number) {
+          while (job.next <= job.pdf.numPages && job.pages.has(job.next)) ++job.next;
+          number = job.next++;
+        }
+        if (number > job.pdf.numPages) break;
+        const recognized = await scanOcrPage(job, number);
+        if (!ocrCurrent(job)) return;
+        if (recognized) job.pages.set(number, recognized);
+        updateOcrProgress(job);
+        if (number === state.page && state.viewportPage === number) {
+          paintOcrText();
+          ocrStatusForPage();
+        }
+        // Permitir que se procesen clics, navegación y cambios de documento.
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    } catch (error) {
+      if (ocrCurrent(job)) {
+        job.failed = true;
+        console.warn("EmLetter: OCR no disponible", error);
+        updateOcrProgress(job);
+        ocrStatusForPage();
+      }
+    } finally {
+      const worker = job.worker;
+      job.worker = null;
+      if (worker) try { await worker.terminate(); } catch (_) {}
+    }
+  }
+
+  function beginOcr(pdf) {
+    const job = { pdf, cancelled: false, worker: null, failed: false,
+      pages: new Map(), priority: [state.page], next: 1 };
+    state.ocrJob = job;
+    updateOcrProgress(job);
+    ocrStatusForPage();
+    // El PDF ya puede leerse mientras se descarga/arranca el motor OCR.
+    runOcr(job);
   }
 
   async function destinationPage(destination) {
@@ -373,10 +613,14 @@
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
       applyTheme();
       state.viewport = viewport;
+      state.viewportPage = state.page;
+      prioritizeOcr(state.page);
       paintRedactions();
       await Promise.allSettled([renderText(page, viewport, renderToken), renderLinks(page, viewport, renderToken)]);
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
+      paintOcrText();
       setStatus(state.redactionMode ? "Lápiz activo: pulsa una palabra o arrastra para cubrir un área" : `Página ${state.page} de ${state.total}`);
+      ocrStatusForPage();
       requestAnimationFrame(() => {
         if (renderToken !== state.revision) return;
         if (preserveCenter) {
@@ -432,6 +676,7 @@
       elements.settings.open = false;
       updateUI();
       await render();
+      if (attempt === state.loadingRevision && state.pdf === pdf) beginOcr(pdf);
     } catch (error) {
       if (attempt !== state.loadingRevision) return;
       console.error("EmLetter PDF:", error);
@@ -545,7 +790,7 @@
   // PDF.js divide el texto en fragmentos: Range permite encontrar la PALABRA bajo
   // el cursor, no bloquear accidentalmente toda la línea del documento.
   function wordUnderPointer(clientX, clientY) {
-    for (const span of elements.text.querySelectorAll("span")) {
+    for (const span of [...elements.text.querySelectorAll("span"), ...elements.ocrLayer.querySelectorAll("span")]) {
       const textNode = span.firstChild;
       if (!textNode || textNode.nodeType !== Node.TEXT_NODE || !textNode.length) continue;
       const bounds = span.getBoundingClientRect();
@@ -609,7 +854,9 @@
     } else {
       const word = wordUnderPointer(event.clientX, event.clientY);
       if (word) appendRedaction([word]);
-      else setStatus("No hay texto reconocible aquí. Arrastra el lápiz para cubrir una zona, incluso en documentos escaneados.");
+      else setStatus(state.ocrJob && !state.ocrJob.pages.has(state.page) && !state.ocrJob.failed
+        ? "El OCR sigue reconociendo esta página. Inténtalo cuando aparezca «Texto OCR listo» o arrastra para censurar."
+        : "No se detectó una palabra en esa zona. Arrastra el lápiz para cubrirla igualmente.");
     }
   });
   elements.redactions.addEventListener("pointercancel", () => {
