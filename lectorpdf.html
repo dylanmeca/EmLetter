@@ -4,6 +4,8 @@ title: Lector PDF · EmLetter
 description: Lee documentos PDF en EmLetter, con modo oscuro, zoom y navegación sin subir los archivos a un servidor.
 permalink: /lectorpdf/
 pdf_reader_page: true
+adsense_page: true
+adsense_slot_keys: [pdf_bottom]
 ---
 <main class="pdf-reader-page" id="contenido">
   <section class="pdf-reader-intro">
@@ -95,6 +97,8 @@ pdf_reader_page: true
       <input type="range" id="pdf-page-range" min="1" max="1" value="1" disabled>
     </div>
   </section>
+
+  {% include ad-slot.html slot=site.google_adsense.slots.pdf_bottom class="ad-pdf-bottom" %}
 
   <footer class="bottom-note pdf-reader-footer">
     <span>© {{ site.time | date: '%Y' }} Dylan Meca</span>
