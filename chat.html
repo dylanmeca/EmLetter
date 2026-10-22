@@ -48,7 +48,7 @@ adsense_page: false # Chat privado: Google prohíbe AdSense aquí.
 
     <form id="chat-message-form" class="chat-composer" autocomplete="off">
       <label for="chat-text" class="sr-only">Mensaje</label>
-      <textarea id="chat-text" placeholder="Escribe un mensaje…" rows="1" maxlength="4000" enterkeyhint="send" disabled></textarea>
+      <textarea id="chat-text" placeholder="Escribe un mensaje…" rows="1" maxlength="4000" enterkeyhint="enter" aria-describedby="chat-composer-help" disabled></textarea>
       <label class="chat-attach" for="chat-files" tabindex="0" role="button" title="Adjuntar archivos" aria-label="Adjuntar archivos">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.2 11.5-8.8 8.7a5 5 0 0 1-7.1-7.1L15 3.5a3.4 3.4 0 1 1 4.8 4.8L10 18a1.7 1.7 0 0 1-2.4-2.4l9-9"/></svg>
       </label>
@@ -57,6 +57,7 @@ adsense_page: false # Chat privado: Google prohíbe AdSense aquí.
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7.2 20-4.1-8.7L2 9.2 22 2Z"/><path d="M22 2 10.7 13.3"/></svg>
       </button>
     </form>
+    <p id="chat-composer-help" class="chat-composer-help">Enter: nueva línea · Ctrl/⌘ + Enter: enviar · Pega imágenes o archivos para enviarlos</p>
     <div class="chat-status-row">
       <span id="chat-status" role="status" aria-live="polite">Esperando conexión…</span>
       <span>↗ Envío directo entre navegadores</span>
