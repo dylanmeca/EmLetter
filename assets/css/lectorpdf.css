@@ -32,13 +32,23 @@
 .pdf-reader-settings-body{position:absolute;right:0;top:calc(100% + 9px);width:260px;max-width:calc(100vw - 40px);padding:17px;border:1px solid #4a5974;border-radius:10px;background:#101b2e;box-shadow:0 20px 36px #0008;z-index:8;display:flex;flex-direction:column;gap:9px}
 .pdf-reader-settings-body label{font-size:11px;font-weight:700;color:#b4c5df;margin-top:4px}
 .pdf-reader-settings-body select{width:100%;min-height:38px;padding:8px 10px;border:1px solid #455575;border-radius:7px;background:#0a1323;color:#eef3fc;font-size:13px}
+/* Preferencia de OCR: interruptor accesible y cómodo para pulsar también en móvil. */
+.pdf-reader-settings-body .pdf-reader-ocr-preference{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:5px}
+.pdf-reader-settings-body .pdf-reader-ocr-preference label{flex:1;margin:0;font-size:12px;line-height:1.35;cursor:pointer}
+.pdf-reader-settings-body #pdf-ocr-enabled{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:41px;height:24px;margin:0;border:1px solid #64728c;border-radius:24px;background:#303f55;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.pdf-reader-settings-body #pdf-ocr-enabled::before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#e5eaf4;transition:transform .15s ease}
+.pdf-reader-settings-body #pdf-ocr-enabled:checked{background:#4169ac;border-color:#7da2e1}
+.pdf-reader-settings-body #pdf-ocr-enabled:checked::before{transform:translateX(17px)}
+.pdf-reader-settings-body #pdf-ocr-enabled:focus-visible{outline:2px solid #b5ccff;outline-offset:3px}
+.pdf-reader-settings-body #pdf-ocr-enabled:disabled{opacity:.5;cursor:not-allowed}
+.pdf-reader-settings-body .pdf-reader-ocr-help{margin:0 0 5px;color:#96a9c6}
 .pdf-reader-settings-body .pdf-reader-range-label{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .pdf-reader-range-label output{font-variant-numeric:tabular-nums;font-size:11px;color:#e2ebfc;font-weight:600}
 .pdf-reader-settings-body input[type=range]{width:100%;height:24px;margin:0 0 4px;accent-color:#b1c6ef;cursor:pointer;touch-action:pan-x}
 .pdf-reader-settings-body input[type=range]:focus-visible{outline:2px solid #b5ccff;outline-offset:2px}
 .pdf-reader-rotate-mobile{display:none}
 .pdf-reader-settings-body p{font-size:11px;line-height:1.5;margin:7px 0 0;color:#8799b5}
-.pdf-reader-stage{min-width:0;height:clamp(410px,65vh,720px);position:relative;background:radial-gradient(ellipse at 60% -30%,#414a6416,transparent 65%),#080e19;overflow:hidden}
+.pdf-reader-stage{min-width:0;height:clamp(410px,65vh,720px);position:relative;z-index:1;background:radial-gradient(ellipse at 60% -30%,#414a6416,transparent 65%),#080e19;overflow:hidden}
 .pdf-reader-empty{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;color:#94a4bc}
 .pdf-reader-empty-symbol{width:70px;height:70px;display:grid;place-items:center;border:1px solid #3a4b65;background:#151f32;border-radius:50%;font:37px Georgia,serif;color:#b8c6dd;margin-bottom:19px}
 .pdf-reader-empty h2{font:600 22px/1.35 Georgia,serif;color:#e0e7f4;margin:0 0 9px}
