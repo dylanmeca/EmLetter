@@ -128,7 +128,7 @@
     fallbackFullscreen: false, previousBodyOverflow: "",
     viewport: null, redactionMode: false, redactionBoxes: new Map(), drawing: null,
     exporting: false, exportLibPromise: null, ocrJob: null, viewportPage: 0, preparing: false,
-    ocrPreparation: 0,
+    ocrPreparation: 0, pinch: null,
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -187,6 +187,7 @@
   }
 
   function stopRender() {
+    cancelPinchPreview();
     ++state.revision;
     try { state.renderTask?.cancel(); } catch (_) { /* Se puede cancelar al terminar. */ }
     try { state.textTask?.cancel(); } catch (_) {}
@@ -607,7 +608,7 @@
     } catch (error) { console.warn("EmLetter: no se pudieron mostrar algunos enlaces del PDF.", error); }
   }
 
-  async function render({ preserveCenter = false } = {}) {
+  async function render({ preserveCenter = false, anchor = null } = {}) {
     if (!state.pdf) return;
     const currentPdf = state.pdf;
     const oldW = elements.scroll.scrollWidth || 1;
@@ -657,7 +658,15 @@
       setStatus(`Página ${state.page} de ${state.total}`);
       requestAnimationFrame(() => {
         if (renderToken !== state.revision) return;
-        if (preserveCenter) {
+        if (anchor) {
+          // Mantener bajo los dedos el mismo punto del documento al finalizar el gesto.
+          const scrollRect = elements.scroll.getBoundingClientRect();
+          const sheetRect = elements.sheet.getBoundingClientRect();
+          const originX = sheetRect.left - scrollRect.left + elements.scroll.scrollLeft;
+          const originY = sheetRect.top - scrollRect.top + elements.scroll.scrollTop;
+          elements.scroll.scrollLeft = Math.max(0, originX + anchor.x * elements.sheet.clientWidth - (anchor.clientX - scrollRect.left));
+          elements.scroll.scrollTop = Math.max(0, originY + anchor.y * elements.sheet.clientHeight - (anchor.clientY - scrollRect.top));
+        } else if (preserveCenter) {
           elements.scroll.scrollLeft = Math.max(0, fractionX * elements.scroll.scrollWidth - elements.scroll.clientWidth / 2);
           elements.scroll.scrollTop = Math.max(0, fractionY * elements.scroll.scrollHeight - elements.scroll.clientHeight / 2);
         } else {
@@ -1088,13 +1097,99 @@
   elements.redactToggle.addEventListener("click", () => setRedactionMode(!state.redactionMode));
   elements.redactDownload.addEventListener("click", exportRedactedPdf);
 
-  function setZoom(value) {
-    if (!state.pdf || state.preparing) return;
+  function setZoom(value, { anchor = null } = {}) {
+    if (!state.pdf || state.preparing || state.exporting) return;
     const next = clamp(Math.round(value * 100) / 100, .5, 5);
     if (Math.abs(next - state.zoom) < .005) return;
     state.zoom = next;
-    render({ preserveCenter: true });
+    render({ preserveCenter: !anchor, anchor });
   }
+
+  // Zoom táctil con dos dedos: la hoja se escala durante el gesto para que la
+  // respuesta sea fluida, pero PDF.js solo vuelve a renderizar al soltar los dedos.
+  // Un dedo sigue desplazando la página de forma nativa; no se interceptan clics,
+  // selección de texto ni enlaces mientras no haya dos contactos simultáneos.
+  function pinchGeometry(touches) {
+    const a = touches[0], b = touches[1];
+    return {
+      distance: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+      clientX: (a.clientX + b.clientX) / 2,
+      clientY: (a.clientY + b.clientY) / 2,
+    };
+  }
+
+  function cancelPinchPreview() {
+    if (!state.pinch) return;
+    state.pinch = null;
+    elements.sheet.style.transform = "";
+    elements.sheet.style.transformOrigin = "";
+    elements.sheet.style.willChange = "";
+    elements.zoomReset.textContent = `${Math.round(state.zoom * 100)}%`;
+  }
+
+  elements.scroll.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 2 || state.pinch || !state.pdf || state.preparing ||
+        state.exporting || !state.viewport || elements.scroll.hidden) return;
+    const center = pinchGeometry(event.touches);
+    if (center.distance < 8) return;
+    const sheet = elements.sheet.getBoundingClientRect();
+    if (!sheet.width || !sheet.height) return;
+    // Si el lápiz estaba haciendo una marca con el primer dedo, la descartamos:
+    // apoyar un segundo dedo significa zoom, nunca una nueva censura.
+    if (state.drawing) {
+      try { elements.redactions.releasePointerCapture(state.drawing.id); } catch (_) {}
+      state.drawing = null;
+      elements.redactions.querySelector(".pdf-reader-redaction-preview")?.remove();
+    }
+    const x = clamp((center.clientX - sheet.left) / sheet.width, 0, 1);
+    const y = clamp((center.clientY - sheet.top) / sheet.height, 0, 1);
+    state.pinch = {
+      startDistance: center.distance,
+      startZoom: state.zoom,
+      zoom: state.zoom,
+      startX: center.clientX,
+      startY: center.clientY,
+      clientX: center.clientX,
+      clientY: center.clientY,
+      anchorX: x,
+      anchorY: y,
+    };
+    elements.sheet.style.transformOrigin = `${x * elements.sheet.clientWidth}px ${y * elements.sheet.clientHeight}px`;
+    elements.sheet.style.willChange = "transform";
+  }, { passive: true });
+
+  elements.scroll.addEventListener("touchmove", (event) => {
+    const pinch = state.pinch;
+    if (!pinch || event.touches.length < 2) return;
+    // Bloquea el zoom de la página web solo durante el pellizco dentro del PDF.
+    if (event.cancelable) event.preventDefault();
+    const center = pinchGeometry(event.touches);
+    const zoom = clamp(pinch.startZoom * center.distance / pinch.startDistance, .5, 5);
+    pinch.zoom = zoom;
+    pinch.clientX = center.clientX;
+    pinch.clientY = center.clientY;
+    const dx = center.clientX - pinch.startX;
+    const dy = center.clientY - pinch.startY;
+    elements.sheet.style.transform = `translate(${dx}px, ${dy}px) scale(${zoom / pinch.startZoom})`;
+    elements.zoomReset.textContent = `${Math.round(zoom * 100)}%`;
+  }, { passive: false });
+
+  function finishPinch(commit) {
+    const pinch = state.pinch;
+    if (!pinch) return;
+    cancelPinchPreview();
+    if (commit && state.pdf && !state.preparing) {
+      setZoom(pinch.zoom, {
+        anchor: { x: pinch.anchorX, y: pinch.anchorY, clientX: pinch.clientX, clientY: pinch.clientY },
+      });
+    }
+  }
+
+  elements.scroll.addEventListener("touchend", (event) => {
+    if (state.pinch && event.touches.length < 2) finishPinch(true);
+  }, { passive: true });
+  elements.scroll.addEventListener("touchcancel", () => finishPinch(false), { passive: true });
+  window.addEventListener("blur", () => finishPinch(false));
 
   function rotate() {
     if (!state.pdf || state.preparing) return;
