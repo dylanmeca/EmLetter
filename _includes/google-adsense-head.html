@@ -1,4 +1,17 @@
-{% if site.google_adsense.enabled and site.google_adsense.client and site.google_adsense.client != '' %}
-<meta name="google-adsense-account" content="{{ site.google_adsense.client | escape }}">
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ site.google_adsense.client | uri_escape }}" crossorigin="anonymous"></script>
+{% assign adsense_client = site.google_adsense.client | default: '' %}
+{% if site.google_adsense.enabled and adsense_client != '' and adsense_client != 'ca-pub-0000000000000000' %}
+<meta name="google-adsense-account" content="{{ adsense_client | escape }}">
+{% comment %}El script solo se carga en páginas habilitadas con un slot configurado.
+El chat, el lector de cartas privadas y las páginas auxiliares no reciben
+unidades manuales. Desactivar Auto ads en AdSense (ver ADSENSE.md).{% endcomment %}
+{% assign adsense_has_slot = false %}
+{% for ad_key in page.adsense_slot_keys %}
+  {% assign possible_slot = site.google_adsense.slots[ad_key] | default: '' %}
+  {% if possible_slot != '' %}
+    {% assign adsense_has_slot = true %}
+  {% endif %}
+{% endfor %}
+{% if page.adsense_page and adsense_has_slot %}
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client | uri_escape }}" crossorigin="anonymous"></script>
+{% endif %}
 {% endif %}

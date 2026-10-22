@@ -1,15 +1,29 @@
+{% comment %}
+  Unidad reutilizable para páginas elegibles. El CSS no crea espacios si
+  enabled=false, el ID es de ejemplo, o falta el slot.
+{% endcomment %}
 {% assign ad_slot = include.slot | default: '' %}
-{% if site.google_adsense.enabled and site.google_adsense.client and site.google_adsense.client != '' and ad_slot != '' %}
-<div class="ad-placement {{ include.class | default: '' }}" aria-label="Publicidad">
+{% assign adsense_client = site.google_adsense.client | default: '' %}
+{% if site.google_adsense.enabled and page.adsense_page and adsense_client != '' and adsense_client != 'ca-pub-0000000000000000' and ad_slot != '' %}
+<div class="ad-placement {{ include.class | default: '' }}" role="complementary" aria-label="Publicidad">
   <span class="ad-label">Publicidad</span>
   <ins class="adsbygoogle"
        style="display:block"
-       data-ad-client="{{ site.google_adsense.client | escape }}"
+       data-ad-client="{{ adsense_client | escape }}"
        data-ad-slot="{{ ad_slot | escape }}"
        data-ad-format="{{ include.format | default: 'auto' | escape }}"
        data-full-width-responsive="true"></ins>
 </div>
 <script>
+  {% if include.skip_on_letter %}
+  // No solicitar publicidad al abrir directamente una carta compartida.
+  if (/^#c[12]\./.test(window.location.hash)) {
+    document.currentScript.previousElementSibling.hidden = true;
+  } else {
+    (window.adsbygoogle = window.adsbygoogle || []).push({});
+  }
+  {% else %}
   (window.adsbygoogle = window.adsbygoogle || []).push({});
+  {% endif %}
 </script>
 {% endif %}
