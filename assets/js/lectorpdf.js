@@ -921,6 +921,53 @@
     elements.redactions.querySelector(".pdf-reader-redaction-preview")?.remove();
   });
 
+  // Sustituye los píxeles censurados por nuevos píxeles negros opacos, sin
+  // mezclarlos con el contenido que existía previamente. putImageData ignora
+  // el color, el alpha, las transformaciones y los filtros del canvas.
+  // Se procesa en franjas pequeñas para no reservar otro bitmap de toda la página.
+  function destroyRedactedPixels(ctx, left, top, right, bottom) {
+    const startX = clamp(left, 0, ctx.canvas.width);
+    const startY = clamp(top, 0, ctx.canvas.height);
+    const endX = clamp(right, 0, ctx.canvas.width);
+    const endY = clamp(bottom, 0, ctx.canvas.height);
+    const width = endX - startX;
+    const height = endY - startY;
+    if (width <= 0 || height <= 0) throw new Error("La zona censurada queda fuera de la página.");
+    const rows = Math.min(256, height);
+    const black = ctx.createImageData(width, rows);
+    // createImageData entrega RGB=0, alpha=0: lo reemplazamos por negro opaco.
+    for (let i = 3; i < black.data.length; i += 4) black.data[i] = 255;
+    for (let y = 0; y < height; y += rows) {
+      ctx.putImageData(black, startX, startY + y, 0, 0, width, Math.min(rows, height - y));
+    }
+  }
+
+  // El PDF de salida se comprueba ANTES de ofrecerlo para descargar. Un PDF
+  // exclusivamente de imágenes no debe contener texto extraíble ni anotaciones.
+  // Cualquier fallo de validación impide entregar una copia potencialmente insegura.
+  async function verifySanitizedPdf(bytes, expectedPages) {
+    const pdfjs = await getLib();
+    // PDF.js puede transferir el ArrayBuffer al worker; preservar bytes de salida.
+    const task = pdfjs.getDocument({ data: bytes.slice() });
+    let checked = null;
+    try {
+      checked = await task.promise;
+      if (checked.numPages !== expectedPages) throw new Error("El número de páginas ha cambiado.");
+      for (let n = 1; n <= expectedPages; n++) {
+        const page = await checked.getPage(n);
+        const contents = await page.getTextContent();
+        if (contents.items?.some((item) => typeof item.str === "string" && item.str.trim())) {
+          throw new Error("El PDF censurado todavía contiene texto recuperable.");
+        }
+        const annotations = await page.getAnnotations();
+        if (annotations.length) throw new Error("El PDF censurado contiene anotaciones.");
+      }
+    } finally {
+      if (checked) await checked.destroy();
+      else await task.destroy();
+    }
+  }
+
   async function exportRedactedPdf() {
     if (!state.pdf || state.exporting || !hasRedactions()) return;
     const original = state.pdf;
@@ -952,22 +999,31 @@
         if (!ctx) throw new Error("No se pudo crear el lienzo para exportar.");
         try {
           await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
-          ctx.fillStyle = "#000000";
-          for (const box of state.redactionBoxes.get(number) || []) {
+          const boxes = state.redactionBoxes.get(number) || [];
+          for (const box of boxes) {
             const rect = viewportRect(viewport, box);
-            const left = Math.floor(Math.min(rect[0], rect[2])) - 2;
-            const top = Math.floor(Math.min(rect[1], rect[3])) - 2;
-            const right = Math.ceil(Math.max(rect[0], rect[2])) + 2;
-            const bottom = Math.ceil(Math.max(rect[1], rect[3])) + 2;
-            ctx.fillRect(left, top, right - left, bottom - top);
+            if (!rect.every(Number.isFinite)) throw new Error("Las coordenadas de censura no son válidas.");
+            // Margen adicional en la imagen final: cubre bordes antialias y
+            // pequeños desajustes entre la capa de texto y la página renderizada.
+            const guard = Math.max(4, Math.ceil(scale * 2));
+            const left = Math.floor(Math.min(rect[0], rect[2])) - guard;
+            const top = Math.floor(Math.min(rect[1], rect[3])) - guard;
+            const right = Math.ceil(Math.max(rect[0], rect[2])) + guard;
+            const bottom = Math.ceil(Math.max(rect[1], rect[3])) + guard;
+            destroyRedactedPixels(ctx, left, top, right, bottom);
           }
-          // Solo se incorpora una imagen de píxeles por página: no quedan textos,
-          // capas, adjuntos ni metadatos del PDF original debajo de las barras.
+          // PNG sin pérdidas en páginas censuradas: conserva el negro exacto,
+          // sin halos de compresión JPEG en los bordes. Las demás páginas usan
+          // JPEG para mantener el archivo de salida en un tamaño razonable.
+          // El PDF nuevo solo incluirá estas imágenes, nunca objetos del original.
+          const imageType = boxes.length ? "image/png" : "image/jpeg";
           const blob = await new Promise((resolve, reject) => canvas.toBlob(
             (value) => value ? resolve(value) : reject(new Error("No se pudo convertir la página a imagen.")),
-            "image/jpeg", .94,
+            imageType, .94,
           ));
-          const img = await result.embedJpg(await blob.arrayBuffer());
+          const img = boxes.length
+            ? await result.embedPng(await blob.arrayBuffer())
+            : await result.embedJpg(await blob.arrayBuffer());
           const output = result.addPage([base.width, base.height]);
           output.drawImage(img, { x: 0, y: 0, width: base.width, height: base.height });
         } finally {
@@ -976,10 +1032,13 @@
       }
       setLoading("Guardando PDF censurado…");
       const bytes = await result.save({ useObjectStreams: true });
+      setLoading("Verificando el PDF censurado…");
+      await verifySanitizedPdf(bytes, state.total);
       const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = (state.fileName.replace(/\.pdf$/i, "") || "documento") + "-censurado.pdf";
+      // No conservar el nombre original: también puede contener datos privados.
+      link.download = "documento-censurado.pdf";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -987,7 +1046,7 @@
       setStatus(`Página ${state.page} de ${state.total}`);
     } catch (error) {
       console.error("EmLetter: error al exportar PDF censurado:", error);
-      showError("No se pudo descargar el PDF censurado. Comprueba tu conexión y la memoria disponible.");
+      showError("No se pudo generar o verificar una copia segura del PDF censurado. No se descargó ningún archivo.");
     } finally {
       state.exporting = false;
       hideLoading();
