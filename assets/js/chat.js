@@ -13,6 +13,7 @@
   const DB_NAME = 'emletter-chat-files';
   const DB_VERSION = 1;
   const MAX_TEXT = 4000;
+  const MAX_COMPOSER_HEIGHT = 176;
   const MAX_MESSAGES_PER_CHAT = 150;
   const MAX_CHATS = 10;
   const $ = (id) => document.getElementById(id);
@@ -651,7 +652,7 @@
   }
   function onWriting() {
     ui.text.style.height = 'auto';
-    ui.text.style.height = `${Math.min(ui.text.scrollHeight, 128)}px`;
+    ui.text.style.height = `${Math.min(ui.text.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
     if (!online()) return;
     const now = Date.now();
     if (now - lastTypingSent > 900) {
@@ -1114,11 +1115,48 @@
       setStatus(copied ? 'ID copiado.' : `Copia este ID: ${localId}`);
     }
   });
+  // Enter inserta una nueva línea (también en móviles); Ctrl/⌘ + Enter envía.
+  // El botón de enviar sigue disponible para ratón y pantallas táctiles.
   ui.form.addEventListener('submit', (event) => { event.preventDefault(); sendText(); });
   ui.text.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-      event.preventDefault(); sendText();
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) &&
+        !event.isComposing && event.keyCode !== 229) {
+      event.preventDefault();
+      sendText();
     }
+  });
+
+  // El evento paste se dispara tanto con Ctrl/⌘ + V como con «Pegar» del menú.
+  // Solo interceptamos ficheros reales del portapapeles: el texto sigue pegándose
+  // normalmente dentro del textarea sin convertirse en adjunto.
+  function pastedFiles(clipboard) {
+    if (!clipboard) return [];
+    const items = Array.from(clipboard.items || []);
+    const files = items.filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile()).filter(Boolean);
+    return files.length ? files : Array.from(clipboard.files || []);
+  }
+  function namePastedFile(file, index) {
+    // Las capturas copiadas suelen llamarse image.png o blob: distinguirlas.
+    const original = file.name || '';
+    if (file.type.startsWith('image/') && (!original || /^(?:image|blob)(?:\s*\(\d+\))?(?:\.[^.]+)?$/i.test(original))) {
+      const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif',
+        'image/webp': 'webp', 'image/bmp': 'bmp', 'image/avif': 'avif' }[file.type] || 'png';
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      return new File([file], `captura-${stamp}-${index + 1}.${ext}`, { type: file.type, lastModified: file.lastModified });
+    }
+    return file;
+  }
+  ui.text.addEventListener('paste', (event) => {
+    const files = pastedFiles(event.clipboardData);
+    if (!files.length) return; // Texto y enlaces: pegado nativo con saltos de línea.
+    event.preventDefault();
+    if (!online()) {
+      setStatus('Conecta con la otra persona antes de pegar archivos o capturas.');
+      return;
+    }
+    setStatus(files.length === 1 ? 'Enviando el archivo pegado…' : `Enviando ${files.length} archivos pegados…`);
+    for (const [index, file] of files.entries()) void sendFile(namePastedFile(file, index));
   });
   ui.text.addEventListener('input', onWriting);
   ui.text.addEventListener('blur', stopLocalTyping);
