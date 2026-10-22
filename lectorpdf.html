@@ -72,8 +72,9 @@ adsense_slot_keys: [pdf_bottom]
           </select>
           <label class="pdf-reader-range-label" for="pdf-brightness">Brillo <output id="pdf-brightness-value" for="pdf-brightness">100%</output></label>
           <input type="range" id="pdf-brightness" min="50" max="150" step="5" value="100" aria-label="Brillo del documento">
-          <label class="pdf-reader-range-label" for="pdf-blue-light">Filtro de luz azul <output id="pdf-blue-light-value" for="pdf-blue-light">0%</output></label>
-          <input type="range" id="pdf-blue-light" min="0" max="100" step="5" value="0" aria-label="Intensidad del filtro de luz azul">
+          <label class="pdf-reader-range-label" for="pdf-blue-light">Filtro de luz azul <output id="pdf-blue-light-value" for="pdf-blue-light">0% · 6500 K</output></label>
+          <input type="range" id="pdf-blue-light" min="0" max="100" step="5" value="0" aria-label="Intensidad del filtro de luz azul" aria-describedby="pdf-blue-light-help">
+          <p id="pdf-blue-light-help" class="pdf-reader-blue-light-help">Reduce la componente azul del documento ajustando su temperatura de color aproximada (6500–2700 K). No sustituye el filtro de luz azul de tu pantalla.</p>
           <button type="button" id="pdf-rotate-mobile" class="pdf-reader-rotate-mobile" disabled>↻ Girar página</button>
           <p>Estos ajustes cambian solo la visualización, no el archivo original.</p>
         </div>
@@ -81,6 +82,14 @@ adsense_slot_keys: [pdf_bottom]
     </div>
 
     <div id="pdf-reader-stage" class="pdf-reader-stage" aria-label="Área de lectura PDF">
+      <!-- Matriz de color aplicada nativamente por el navegador a la hoja, no una capa naranja. -->
+      <svg class="pdf-reader-filter-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" width="0" height="0">
+        <defs>
+          <filter id="pdf-reader-temperature-filter" x="0" y="0" width="100%" height="100%" color-interpolation-filters="linearRGB">
+            <feColorMatrix id="pdf-reader-temperature-matrix" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" />
+          </filter>
+        </defs>
+      </svg>
       <div id="pdf-empty" class="pdf-reader-empty">
         <span class="pdf-reader-empty-symbol" aria-hidden="true">☾</span>
         <h2>Tu próxima lectura empieza aquí.</h2>
