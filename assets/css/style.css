@@ -896,35 +896,60 @@ body[data-frame-mode="emoji"] .emoji-frame{display:block}
 .privacy-card a{color:#c7d8f6}
 .privacy-back{display:inline-block;margin-top:28px}
 
-/* Google AdSense: responsive placements controlled from _config.yml. */
+/* AdSense manual: bloques identificados y apartados de las herramientas.
+   No hay elemento alguno si la publicidad está desactivada o falta el slot. */
 .ad-placement{
-  width:min(100%,1100px);
-  margin:0 auto 28px;
-  padding:10px 12px 12px;
-  border:1px solid rgba(71,89,124,.55);
-  border-radius:8px;
-  background:rgba(5,13,32,.58);
-  overflow:hidden;
+  width:100%;
+  max-width:1024px;
+  min-width:0;
+  margin:36px auto;
+  padding:13px 18px 18px;
+  border:1px solid #364765;
+  border-radius:10px;
+  background:#0a152b;
   text-align:center;
+  clear:both;
 }
 .ad-placement .ad-label{
   display:block;
-  margin-bottom:7px;
-  color:var(--muted);
-  font-size:9px;
-  line-height:1;
-  letter-spacing:.16em;
+  margin:0 0 12px;
+  color:#a9b8d4;
+  font-size:10px;
+  line-height:1.4;
+  letter-spacing:.13em;
   text-transform:uppercase;
 }
-.ad-placement .adsbygoogle{width:100%;min-height:90px}
-.ad-editor-top{margin-top:-8px;margin-bottom:28px}
-#reader .ad-reader-bottom{max-width:var(--paper-width);margin-top:24px;margin-left:var(--paper-left);margin-right:var(--paper-right)}
-.reading #reader .ad-reader-bottom{background:#07122be8}
+.ad-placement .adsbygoogle{
+  display:block;
+  width:100%;
+  min-width:0;
+  min-height:100px;
+}
+/* AdSense señala explícitamente las solicitudes sin anuncio. */
+.ad-placement:has(.adsbygoogle[data-ad-status="unfilled"]){display:none}
+.ad-landing-bottom{margin-top:38px;margin-bottom:8px}
+.ad-editor-bottom{margin-top:42px;margin-bottom:20px}
+.ad-tutorial-middle{margin-top:32px;margin-bottom:34px}
+.ad-pdf-bottom{margin-top:40px;margin-bottom:8px}
 @media(max-width:760px){
-  .ad-placement{margin-bottom:20px;padding:8px 6px 10px;border-left:0;border-right:0;border-radius:0}
+  .ad-placement{
+    margin-top:32px;
+    margin-bottom:26px;
+    padding:12px 9px 15px;
+    border-radius:8px;
+  }
   .ad-placement .adsbygoogle{min-height:100px}
-  .ad-editor-top{margin-top:-4px}
-  #reader .ad-reader-bottom{margin-top:18px}
+  .ad-landing-bottom,.ad-pdf-bottom{margin-bottom:8px}
+  .ad-editor-bottom{margin-top:34px;margin-bottom:22px}
+  .ad-tutorial-middle{margin-top:28px;margin-bottom:30px}
+}
+@media(max-width:570px){
+  /* El interior de la tarjeta del tutorial es angosto en teléfonos pequeños. */
+  .tutorial-card .ad-placement{
+    width:calc(100% + 36px);
+    max-width:none;
+    margin-left:-18px;
+  }
 }
 
 /* EmLetter landing page. Uses the existing dark palette and typography. */
