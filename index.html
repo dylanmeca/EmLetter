@@ -3,6 +3,8 @@ layout: default
 title: EmLetter · Cartas que dicen lo que sientes
 description: Escribe, diseña y comparte cartas únicas con EmLetter. Dale forma a tus palabras, a tu manera.
 permalink: /
+adsense_page: true
+adsense_slot_keys: [landing_bottom]
 ---
 
 <!-- Mantiene activos los enlaces de cartas generados antes de trasladar el editor a home.html. -->
@@ -99,6 +101,8 @@ permalink: /
       </div>
     </article>
   </section>
+
+  {% include ad-slot.html slot=site.google_adsense.slots.landing_bottom class="ad-landing-bottom" skip_on_letter=true %}
 
   <footer class="bottom-note"><span>© {{ site.time | date: '%Y' }} Dylan Meca</span><a href="{{ '/politica-de-privacidad/' | relative_url }}">Política de privacidad</a></footer>
 </main>
