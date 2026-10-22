@@ -16,9 +16,25 @@
       integrity:'sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=='
     }
   ];
+  const GIF_SOURCES=[
+    {
+      src:'https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js',
+      worker:'https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.worker.js'
+    },
+    {
+      src:'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js',
+      worker:'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+    },
+    {
+      src:'https://unpkg.com/gif.js.optimized@1.0.1/dist/gif.js',
+      worker:'https://unpkg.com/gif.js.optimized@1.0.1/dist/gif.worker.js'
+    }
+  ];
   const IMAGE_PROXY='https://wsrv.nl/';
   let noticeTimer;
   let rendererPromise;
+  let encoderPromise;
+  let gifWorkerScript='';
   const UNSUPPORTED_COLOR_FUNCTION_RE=/\b(?:color-mix|color|oklch|oklab|lch|lab|device-cmyk)\s*\(/i;
   let styleProbe;
 
@@ -238,16 +254,15 @@
     }));
   }
 
-  function loadScript(source){
+  function loadScript(source,globalName){
     return new Promise((resolve,reject)=>{
       const script=document.createElement('script');
       script.src=source.src;
       script.async=true;
       script.crossOrigin='anonymous';
-      script.integrity=source.integrity;
+      if(source.integrity)script.integrity=source.integrity;
       script.referrerPolicy='no-referrer';
-      script.dataset.emletterHtml2canvas='';
-      script.onload=()=>typeof window.html2canvas==='function'?resolve(window.html2canvas):reject(new Error('El exportador no se inició.'));
+      script.onload=()=>typeof window[globalName]==='function'?resolve(window[globalName]):reject(new Error('El exportador no se inició.'));
       script.onerror=()=>{script.remove();reject(new Error('No se pudo cargar el exportador.'))};
       document.head.append(script);
     });
@@ -259,52 +274,104 @@
     rendererPromise=(async()=>{
       let lastError;
       for(const source of HTML2CANVAS_SOURCES){
-        try{return await loadScript(source)}catch(error){lastError=error}
+        try{return await loadScript(source,'html2canvas')}catch(error){lastError=error}
       }
       throw lastError||new Error('No se pudo cargar el exportador de imagen. Revisa tu conexión e inténtalo de nuevo.');
     })();
     return rendererPromise;
   }
 
-  function dataUrlToBlob(dataUrl){
-    const [meta,data]=dataUrl.split(',');
-    const mime=(meta.match(/^data:([^;]+)/)||[])[1]||'image/png';
-    const binary=atob(data);
-    const bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-    return new Blob([bytes],{type:mime});
+  async function loadWorkerFrom(source){
+    const response=await fetch(source,{mode:'cors',credentials:'omit',signal:timeoutSignal(18000)||undefined});
+    if(!response.ok)throw new Error(`No se pudo obtener el codificador GIF (HTTP ${response.status}).`);
+    const worker=await response.blob();
+    if(!worker.size)throw new Error('El codificador GIF recibido está vacío.');
+    // Los navegadores no permiten new Worker() con URL de otro origen.
+    // Un blob: creado aquí sí corresponde al origen de la página.
+    return URL.createObjectURL(new Blob([worker],{type:'text/javascript'}));
   }
 
-  function canvasToBlob(canvas){
-    return new Promise((resolve,reject)=>{
-      try{
-        if(typeof canvas.toBlob==='function'){
-          canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('El navegador no pudo crear el PNG.')),'image/png');
-          return;
+  function loadEncoder(){
+    if(typeof window.GIF==='function'&&gifWorkerScript)return Promise.resolve({GIF:window.GIF,workerScript:gifWorkerScript});
+    if(encoderPromise)return encoderPromise;
+    encoderPromise=(async()=>{
+      let lastError;
+      for(const source of GIF_SOURCES){
+        try{
+          const GIF=typeof window.GIF==='function'?window.GIF:await loadScript(source,'GIF');
+          gifWorkerScript=await loadWorkerFrom(source.worker);
+          return {GIF,workerScript:gifWorkerScript};
+        }catch(error){
+          lastError=error;
         }
-        resolve(dataUrlToBlob(canvas.toDataURL('image/png')));
-      }catch(error){
-        if(error?.name==='SecurityError')reject(new Error('Una imagen externa no pudo convertirse de forma segura. Prueba otra URL para esa imagen.'));
-        else reject(error);
       }
+      throw lastError||new Error('No se pudo cargar el exportador de GIF. Revisa tu conexión e inténtalo de nuevo.');
+    })().catch(error=>{encoderPromise=null;throw error});
+    return encoderPromise;
+  }
+
+  function motionTargets(stage){
+    const selectors=[
+      '.ornament-symbol','.end-ornament','.emoji-frame .frame-side',
+      '.letter-signature[data-signature-style="digital"]',
+      '.ornament-line','.tiptap img',
+      '.free-sticker.free-visual>.emletter-visual-copy'
+    ];
+    return [...new Set(stage.querySelectorAll(selectors.join(',')))].filter(el=>{
+      const computed=getComputedStyle(el);
+      return computed.display!=='none'&&computed.visibility!=='hidden'&&el.getBoundingClientRect().width>0;
+    }).map((el,i)=>{
+      const computed=getComputedStyle(el);
+      return {
+        el,
+        baseTransform:computed.transform==='none'?'':computed.transform,
+        baseOpacity:Number.isFinite(parseFloat(computed.opacity))?parseFloat(computed.opacity):1,
+        baseFilter:computed.filter==='none'?'':computed.filter,
+        shimmer:el.classList.contains('ornament-line'),
+        phase:(i%4)*.54
+      };
     });
   }
 
-  async function createPng(){
+  function setMotionFrame(targets,frame,frameCount,reducedMotion){
+    for(const item of targets){
+      const {el,baseTransform,baseOpacity,baseFilter,phase,shimmer}=item;
+      if(reducedMotion){
+        el.style.transform=baseTransform||'none';
+        el.style.opacity=String(baseOpacity);
+        el.style.filter=baseFilter||'none';
+        continue;
+      }
+      const angle=Math.PI*2*frame/frameCount;
+      if(shimmer){
+        el.style.opacity=String(baseOpacity*(.91+.09*Math.sin(angle+phase)));
+        el.style.filter=`${baseFilter} brightness(${(1.05+.10*Math.sin(angle+phase)).toFixed(3)})`.trim();
+        continue;
+      }
+      const dx=(1.3*Math.sin(angle+phase)).toFixed(2);
+      const dy=(-1.5+1.1*Math.cos(angle+phase)).toFixed(2);
+      const rotation=(.8*Math.sin(angle+phase)).toFixed(2);
+      // Componemos el movimiento con la matriz existente: jamás perder el
+      // desplazamiento elegido por la persona para stickers/ornamentos libres.
+      el.style.transform=`${baseTransform} translate(${dx}px, ${dy}px) rotate(${rotation}deg)`.trim();
+      el.style.transformOrigin='50% 85%';
+    }
+  }
+
+  async function prepareStage(){
     if(!hasContent())throw new Error('Escribe unas palabras antes de descargar la carta.');
     const sourcePaper=$('#edit-paper');
     if(!sourcePaper)throw new Error('No se encontró la carta para exportar.');
 
-    notify('Preparando la carta para descargarla…');
+    notify('Preparando la carta animada…');
     const renderer=await loadRenderer();
-    // Reproducir el tamaño que realmente ve el usuario: en móvil el ancho
-    // configurado para escritorio no equivale al lienzo visible.
+
     const paperWidth=Math.max(1,sourcePaper.getBoundingClientRect().width);
     const wrapper=getComputedStyle(sourcePaper.parentElement);
     const pageSpace=Math.max(0,parseFloat(wrapper.paddingLeft)||0);
 
     const stage=document.createElement('div');
-    stage.className='export-stage';
+    stage.className='export-stage export-animated';
     stage.setAttribute('aria-hidden','true');
     stage.style.position='fixed';
     stage.style.left='-100000px';
@@ -315,9 +382,6 @@
     stage.style.zIndex='-1';
 
     const paper=sourcePaper.cloneNode(true);
-    // Las posiciones absolutas de los bloques Tiptap se pintan con reglas
-    // CSS ligadas a #edit-paper. Al clonar y limpiar los IDs esas reglas
-    // desaparecen, así que conservamos sus propiedades calculadas en línea.
     const sourceBlocks=[...sourcePaper.querySelectorAll('#editor .tiptap > *')];
     const copyBlocks=[...paper.querySelectorAll('#editor .tiptap > *')];
     sourceBlocks.forEach((block,i)=>{
@@ -334,7 +398,7 @@
       if(transform&&transform!=='none')clone.style.setProperty('transform',transform,'important');
       else if(position==='absolute')clone.style.setProperty('transform','none','important');
     });
-    // Incluye los elementos absolutos que queden por debajo del texto normal.
+
     paper.style.minHeight=Math.ceil(sourcePaper.scrollHeight)+'px';
     cleanupClone(paper);
     paper.style.width='100%';
@@ -352,38 +416,98 @@
       await embedImages(stage);
       await embedStyleUrls(stage);
       await waitForImages(stage);
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 
       const width=Math.ceil(stage.getBoundingClientRect().width||parseFloat(stage.style.width));
       const height=Math.ceil(stage.scrollHeight);
       if(!width||!height)throw new Error('No se pudo calcular el tamaño de la carta.');
 
-      const maxSide=15000;
-      const maxPixels=70000000;
-      const preferredScale=Math.min(3,Math.max(2,window.devicePixelRatio||1));
+      return {renderer,stage,width,height};
+    }catch(error){
+      stage.remove();
+      throw error;
+    }
+  }
+
+  function makeRenderOptions(width,height,pixelRatio){
+    return {
+      backgroundColor:null,
+      scale:pixelRatio,
+      useCORS:false,
+      allowTaint:false,
+      foreignObjectRendering:false,
+      logging:false,
+      imageTimeout:0,
+      width,
+      height,
+      windowWidth:Math.max(document.documentElement.clientWidth,width),
+      windowHeight:Math.max(document.documentElement.clientHeight,height),
+      scrollX:0,
+      scrollY:0,
+      removeContainer:true
+    };
+  }
+
+  async function createGif(){
+    const {renderer,stage,width,height}=await prepareStage();
+    try{
+      const {GIF,workerScript}=await loadEncoder();
+      const reducedMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const maxSide=4800;
+      const maxPixels=2800000;
+      const surface=width*height;
+      const preferredScale=surface>1200000?1:1.1;
       const pixelRatio=Math.min(
         preferredScale,
         maxSide/Math.max(width,height),
-        Math.sqrt(maxPixels/(width*height))
+        Math.sqrt(maxPixels/Math.max(1,surface))
       );
-      if(!Number.isFinite(pixelRatio)||pixelRatio<0.55)throw new Error('La carta es demasiado larga para exportarla como una sola imagen en este dispositivo.');
+      if(!Number.isFinite(pixelRatio)||pixelRatio<0.5)throw new Error('La carta es demasiado larga para exportarla como GIF en este dispositivo.');
 
-      const canvas=await renderer(stage,{
-        backgroundColor:null,
-        scale:pixelRatio,
-        useCORS:false,
-        allowTaint:false,
-        foreignObjectRendering:false,
-        logging:false,
-        imageTimeout:0,
-        width,
-        height,
-        windowWidth:Math.max(document.documentElement.clientWidth,width),
-        windowHeight:Math.max(document.documentElement.clientHeight,height),
-        scrollX:0,
-        scrollY:0,
-        removeContainer:true
+      const frameCount=reducedMotion?2:(surface>1800000?7:surface>900000?9:12);
+      const frameDelay=reducedMotion?500:190;
+      const gifWidth=Math.max(1,Math.round(width*pixelRatio));
+      const gifHeight=Math.max(1,Math.round(height*pixelRatio));
+      const renderOptions=makeRenderOptions(width,height,pixelRatio);
+
+      const gif=new GIF({
+        workers:2,
+        quality:10,
+        workerScript,
+        width:gifWidth,
+        height:gifHeight,
+        repeat:0
       });
-      return canvasToBlob(canvas);
+
+
+      const targets=motionTargets(stage);
+      for(let frame=0;frame<frameCount;frame++){
+        notify(`Capturando la animación… ${frame+1}/${frameCount}`);
+        setMotionFrame(targets,frame,frameCount,reducedMotion);
+        const canvas=await renderer(stage,renderOptions);
+        gif.addFrame(canvas,{copy:true,delay:frameDelay});
+        canvas.width=1;
+        canvas.height=1;
+      }
+
+      const finished=new Promise((resolve,reject)=>{
+        let timeout;
+        const done=callback=>value=>{clearTimeout(timeout);callback(value)};
+        gif.on('finished',done(resolve));
+        gif.on('abort',done(()=>reject(new Error('Se canceló la generación del GIF.'))));
+        gif.on('error',done(error=>reject(error instanceof Error?error:new Error('No se pudo generar el GIF animado.'))));
+        gif.on('progress',progress=>notify(`Codificando el GIF… ${Math.max(1,Math.round(progress*100))}%`));
+        timeout=setTimeout(()=>{
+          reject(new Error('El GIF tardó demasiado en codificarse. Prueba con una carta más corta.'));
+          try{gif.abort()}catch{}
+        },120000);
+      });
+
+      notify('Codificando el GIF…');
+      try{gif.render()}catch(error){try{gif.abort()}catch{};throw error}
+      const blob=await finished;
+      if(!(blob instanceof Blob))throw new Error('El navegador no devolvió el GIF animado.');
+      return blob;
     }finally{
       stage.remove();
     }
@@ -395,7 +519,7 @@
     const date=new Date();
     const stamp=[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
     link.href=url;
-    link.download=`emletter-${stamp}.png`;
+    link.download=`emletter-${stamp}.gif`;
     link.rel='noopener';
     document.body.append(link);
     link.click();
@@ -407,14 +531,14 @@
     if(button.disabled)return;
     const original=button.innerHTML;
     button.disabled=true;
-    button.textContent='Preparando imagen…';
+    button.textContent='Preparando GIF…';
     try{
-      const blob=await createPng();
+      const blob=await createGif();
       downloadBlob(blob);
-      notify('Carta descargada como PNG en alta calidad. No se usó la captura de pantalla del navegador.');
+      notify('Carta descargada como GIF animado. El enlace y la vista previa siguen funcionando como antes.');
     }catch(error){
       console.error('[EmLetter export]',error);
-      notify(error?.message||'No se pudo descargar la carta como imagen.');
+      notify(error?.message||'No se pudo descargar la carta como GIF.');
     }finally{
       button.disabled=false;
       button.innerHTML=original;
