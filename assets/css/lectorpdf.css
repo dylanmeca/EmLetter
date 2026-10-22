@@ -55,7 +55,9 @@
 .pdf-reader-empty p{max-width:375px;font:13px/1.65 Inter,'Segoe UI',Arial,sans-serif;color:#91a1ba;margin:0 0 20px}
 .pdf-reader-scroll{height:100%;width:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-color:#40516e transparent;scrollbar-width:thin;padding:14px;touch-action:pan-x pan-y}
 .pdf-reader-sheet{position:relative;margin:0 auto;background:#fff;isolation:isolate;box-shadow:0 10px 35px #0008;filter:brightness(var(--pdf-reader-brightness,1))}
-.pdf-reader-sheet::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;background:#ffbd72;mix-blend-mode:multiply;opacity:var(--pdf-reader-warmth,0)}
+/* El matiz se genera mediante una matriz de color SVG; no hay un velo ámbar encima del texto. */
+.pdf-reader-filter-defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
+.pdf-reader-settings-body .pdf-reader-blue-light-help{margin:0 0 5px;color:#96a9c6}
 .pdf-reader-sheet #pdf-canvas{position:absolute;left:0;top:0;display:block;max-width:none!important;height:auto;transform-origin:center;background:white}
 .pdf-reader-sheet #pdf-canvas.pdf-reader-dark{filter:invert(.94) hue-rotate(180deg) brightness(.84) contrast(1.07)}
 .pdf-reader-text-layer{position:absolute;inset:0;z-index:2;overflow:clip;line-height:1;text-align:initial;text-size-adjust:none;-webkit-text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;pointer-events:auto;user-select:text}
