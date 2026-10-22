@@ -23,20 +23,24 @@ google_analytics:
   enabled: true
   measurement_id: "G-QGPGVLNF8G"
 
-# Google AdSense
-# 1) Cambia enabled a true.
-# 2) Indica tu Publisher ID (ca-pub-...).
-# 3) Crea unidades de anuncio adaptables en AdSense y pega sus IDs de slot.
-# Los bloques quedan ocultos automáticamente cuando el slot está vacío.
+# Google AdSense: anuncios manuales y opcionales.
+# Sin activar AdSense ni configurar IDs reales, no se cargan anuncios.
+# Consulta ADSENSE.md antes de activarlo; mantener Auto ads desactivados
+# evita inserciones automáticas en herramientas o en el chat privado.
 google_adsense:
   enabled: false
-  client: "ca-pub-0000000000000000"
+  client: "ca-pub-0000000000000000" # Reemplazar por el Publisher ID real
   slots:
-    editor_top: ""
-    reader_bottom: ""
+    landing_bottom: ""   # index.html: después de las funcionalidades
+    editor_bottom: ""    # home.html: después del espacio de edición
+    tutorial_middle: "" # tutorial.html: entre apartados
+    pdf_bottom: ""      # lectorpdf.html: bajo el visor (evaluar políticas)
+    editor_top: ""      # Compatibilidad: se usa si editor_bottom está vacío
+    reader_bottom: ""   # Antiguo: no se muestra en cartas privadas
 
 exclude:
   - README.md
+  - ADSENSE.md
   - Gemfile
   - Gemfile.lock
   - node_modules
