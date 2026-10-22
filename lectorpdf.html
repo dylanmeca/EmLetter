@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Lector PDF · EmLetter
-description: Lee documentos PDF en EmLetter, con modo oscuro, zoom y navegación sin subir los archivos a un servidor.
+description: Lee documentos PDF en EmLetter con OCR local en español e inglés, texto seleccionable, censura, modo oscuro y zoom.
 permalink: /lectorpdf/
 pdf_reader_page: true
 adsense_page: true
@@ -86,6 +86,7 @@ adsense_slot_keys: [pdf_bottom]
         <div id="pdf-sheet" class="pdf-reader-sheet">
           <canvas id="pdf-canvas" aria-label="Página del PDF"></canvas>
           <div id="pdf-text-layer" class="pdf-reader-text-layer textLayer"></div>
+          <div id="pdf-ocr-layer" class="pdf-reader-ocr-layer" aria-label="Texto reconocido mediante OCR"></div>
           <div id="pdf-annotation-layer" class="pdf-reader-annotation-layer"></div>
           <div id="pdf-redaction-layer" class="pdf-reader-redaction-layer" aria-label="Censuras del documento"></div>
         </div>
@@ -100,6 +101,7 @@ adsense_slot_keys: [pdf_bottom]
 
     <div class="pdf-reader-bottom">
       <span id="pdf-status" role="status" aria-live="polite">Listo para abrir un PDF</span>
+      <span id="pdf-ocr-progress" class="pdf-reader-ocr-progress" role="status" aria-live="polite" hidden></span>
       <label for="pdf-page-range" class="pdf-reader-visually-hidden">Navegación de páginas</label>
       <input type="range" id="pdf-page-range" min="1" max="1" value="1" disabled>
     </div>
