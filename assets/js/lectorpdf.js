@@ -31,7 +31,7 @@
     fullscreen: $("pdf-fullscreen-toggle"), fullscreenLabel: $("pdf-fullscreen-label"),
     fullscreenIcon: $("pdf-fullscreen-icon"),
     stage: $("pdf-reader-stage"), empty: $("pdf-empty"), scroll: $("pdf-scroll"),
-    sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"), ocrLayer: $("pdf-ocr-layer"), ocrProgress: $("pdf-ocr-progress"),
+    sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"), ocrLayer: $("pdf-ocr-layer"),
     annotations: $("pdf-annotation-layer"), redactions: $("pdf-redaction-layer"),
     redactToggle: $("pdf-redaction-toggle"), redactDownload: $("pdf-redaction-download"), loading: $("pdf-loading"),
     loadingText: $("pdf-loading-text"), error: $("pdf-error"), status: $("pdf-status"), drop: $("pdf-drop"),
@@ -73,7 +73,7 @@
     revision: 0, loadingRevision: 0, errorTimer: null, resizeTimer: null, dragDepth: 0,
     fallbackFullscreen: false, previousBodyOverflow: "",
     viewport: null, redactionMode: false, redactionBoxes: new Map(), drawing: null,
-    exporting: false, exportLibPromise: null, ocrJob: null, viewportPage: 0,
+    exporting: false, exportLibPromise: null, ocrJob: null, viewportPage: 0, preparing: false,
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -110,15 +110,16 @@
   }
 
   function updateUI() {
-    const opened = !!state.pdf;
-    elements.current.textContent = String(opened ? state.page : 0);
+    const opened = !!state.pdf && !state.preparing;
+    elements.current.textContent = String(state.pdf ? state.page : 0);
     elements.total.textContent = String(state.total);
     elements.range.max = String(Math.max(state.total, 1));
     elements.range.value = String(state.page);
     elements.prev.disabled = !opened || state.page <= 1;
     elements.next.disabled = !opened || state.page >= state.total;
     elements.range.disabled = !opened || state.total < 2;
-    elements.close.disabled = !opened || state.exporting;
+    // Cerrar y reemplazar el archivo siguen disponibles durante el OCR.
+    elements.close.disabled = !state.pdf || state.exporting;
     elements.input.disabled = state.exporting;
     elements.redactToggle.disabled = !opened || state.exporting;
     elements.redactDownload.disabled = !opened || state.exporting || !hasRedactions();
@@ -163,7 +164,7 @@
   function refreshViewport() {
     clearTimeout(state.resizeTimer);
     state.resizeTimer = setTimeout(() => {
-      if (state.pdf) render({ preserveCenter: true });
+      if (state.pdf && !state.preparing) render({ preserveCenter: true });
     }, 120);
   }
 
@@ -234,6 +235,7 @@
     state.rotation = 0;
     state.fileName = "";
     state.redactionBoxes.clear();
+    state.preparing = false;
     setRedactionMode(false);
     elements.scroll.hidden = true;
     elements.empty.hidden = false;
@@ -241,7 +243,6 @@
     elements.name.textContent = "Ningún documento abierto";
     elements.name.removeAttribute("title");
     elements.detail.textContent = "Tus archivos se procesan en tu navegador";
-    elements.ocrProgress.hidden = true;
     elements.settings.open = false;
     updateUI();
     if (previous) {
@@ -323,41 +324,17 @@
   }
 
   function updateOcrProgress(job) {
-    if (!ocrCurrent(job)) return;
+    if (!ocrCurrent(job) || !state.preparing) return;
     const done = job.pages.size;
-    elements.ocrProgress.hidden = false;
-    elements.ocrProgress.textContent = job.failed
-      ? "OCR no disponible"
-      : done === job.pdf.numPages
-        ? `OCR listo · ${done}/${job.pdf.numPages}`
-        : `OCR · ${done}/${job.pdf.numPages}`;
-    elements.ocrProgress.title = job.failed
-      ? "Comprueba tu conexión. El texto integrado del PDF sigue disponible."
-      : `Reconocimiento local en español e inglés: ${done} de ${job.pdf.numPages} páginas`;
+    setLoading(job.failed
+      ? "No se completó el reconocimiento. Abriendo documento…"
+      : `Reconociendo texto… ${done} de ${job.pdf.numPages} páginas`);
   }
 
   function prioritizeOcr(pageNumber) {
     const job = state.ocrJob;
     if (!ocrCurrent(job) || job.pages.has(pageNumber)) return;
     job.priority = [pageNumber, ...job.priority.filter((n) => n !== pageNumber)];
-  }
-
-  function ocrStatusForPage() {
-    if (!state.pdf || state.redactionMode) return;
-    const native = elements.text.textContent.trim().length >= 12;
-    if (native) return; // La capa original de PDF.js permanece seleccionable.
-    const job = state.ocrJob;
-    if (!ocrCurrent(job)) return;
-    const result = job.pages.get(state.page);
-    if (result) {
-      setStatus(result.words.length
-        ? "Texto OCR listo: puedes seleccionar y copiar las palabras"
-        : "No se detectó texto legible en esta página; puedes censurar arrastrando el lápiz");
-    } else if (job.failed) {
-      setStatus("OCR no disponible: comprueba tu conexión; aún puedes censurar por áreas");
-    } else {
-      setStatus("Reconociendo texto (OCR)… puedes leer mientras se procesa");
-    }
   }
 
   // Capa invisible de texto seleccionable alineada con las cajas OCR. Las coordenadas
@@ -489,11 +466,8 @@
         if (!ocrCurrent(job)) return;
         if (recognized) job.pages.set(number, recognized);
         updateOcrProgress(job);
-        if (number === state.page && state.viewportPage === number) {
-          paintOcrText();
-          ocrStatusForPage();
-        }
-        // Permitir que se procesen clics, navegación y cambios de documento.
+        // La vista permanece oculta hasta completar todas las páginas.
+        // Dar al navegador una oportunidad de actualizar el progreso.
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
     } catch (error) {
@@ -501,7 +475,6 @@
         job.failed = true;
         console.warn("EmLetter: OCR no disponible", error);
         updateOcrProgress(job);
-        ocrStatusForPage();
       }
     } finally {
       const worker = job.worker;
@@ -510,14 +483,14 @@
     }
   }
 
-  function beginOcr(pdf) {
+  async function beginOcr(pdf) {
     const job = { pdf, cancelled: false, worker: null, failed: false,
       pages: new Map(), priority: [state.page], next: 1 };
     state.ocrJob = job;
     updateOcrProgress(job);
-    ocrStatusForPage();
-    // El PDF ya puede leerse mientras se descarga/arranca el motor OCR.
-    runOcr(job);
+    // No publicar la página hasta terminar el reconocimiento de todo el PDF.
+    await runOcr(job);
+    return job;
   }
 
   async function destinationPage(destination) {
@@ -626,7 +599,6 @@
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
       paintOcrText();
       setStatus(state.redactionMode ? "Lápiz activo: pulsa una palabra o arrastra para cubrir un área" : `Página ${state.page} de ${state.total}`);
-      ocrStatusForPage();
       requestAnimationFrame(() => {
         if (renderToken !== state.revision) return;
         if (preserveCenter) {
@@ -671,6 +643,7 @@
       catch (error) { await documentTask.destroy(); throw error; }
       if (attempt !== state.loadingRevision) { await pdf.destroy(); return; }
       state.pdf = pdf;
+      state.preparing = true;
       state.page = 1;
       state.total = pdf.numPages;
       state.fileName = file.name;
@@ -678,11 +651,23 @@
       elements.name.title = file.name;
       elements.detail.textContent = `${state.total} ${state.total === 1 ? "página" : "páginas"} · lectura local`;
       elements.empty.hidden = true;
-      elements.scroll.hidden = false;
+      elements.scroll.hidden = true;
       elements.settings.open = false;
       updateUI();
+      const ocrResult = await beginOcr(pdf);
+      if (attempt !== state.loadingRevision || state.pdf !== pdf) return;
+      state.preparing = false;
+      elements.scroll.hidden = false;
+      updateUI();
       await render();
-      if (attempt === state.loadingRevision && state.pdf === pdf) beginOcr(pdf);
+      if (attempt !== state.loadingRevision || state.pdf !== pdf) return;
+      if (ocrResult.failed) {
+        // Advertir sin escribir mensajes OCR en la barra inferior.
+        elements.error.textContent = "No se pudo reconocer todo el texto. Puedes leer el PDF y censurar áreas manualmente.";
+        elements.error.hidden = false;
+        clearTimeout(state.errorTimer);
+        state.errorTimer = setTimeout(() => { elements.error.hidden = true; }, 6500);
+      }
     } catch (error) {
       if (attempt !== state.loadingRevision) return;
       console.error("EmLetter PDF:", error);
@@ -708,7 +693,7 @@
   }
 
   function changePage(value) {
-    if (!state.pdf) return;
+    if (!state.pdf || state.preparing) return;
     const target = clamp(Math.trunc(Number(value) || 1), 1, state.total);
     if (target === state.page) return;
     state.page = target;
@@ -724,7 +709,7 @@
   }
 
   function setRedactionMode(active) {
-    state.redactionMode = !!active && !!state.pdf && !state.exporting;
+    state.redactionMode = !!active && !!state.pdf && !state.preparing && !state.exporting;
     state.drawing = null;
     elements.redactions.classList.toggle("is-active", state.redactionMode);
     elements.redactToggle.setAttribute("aria-pressed", String(state.redactionMode));
@@ -860,9 +845,7 @@
     } else {
       const word = wordUnderPointer(event.clientX, event.clientY);
       if (word) appendRedaction([word]);
-      else setStatus(state.ocrJob && !state.ocrJob.pages.has(state.page) && !state.ocrJob.failed
-        ? "El OCR sigue reconociendo esta página. Inténtalo cuando aparezca «Texto OCR listo» o arrastra para censurar."
-        : "No se detectó una palabra en esa zona. Arrastra el lápiz para cubrirla igualmente.");
+      else setStatus("No se detectó una palabra en esa zona. Arrastra el lápiz para cubrirla igualmente.");
     }
   });
   elements.redactions.addEventListener("pointercancel", () => {
@@ -948,7 +931,7 @@
   elements.redactDownload.addEventListener("click", exportRedactedPdf);
 
   function setZoom(value) {
-    if (!state.pdf) return;
+    if (!state.pdf || state.preparing) return;
     const next = clamp(Math.round(value * 100) / 100, .5, 5);
     if (Math.abs(next - state.zoom) < .005) return;
     state.zoom = next;
@@ -956,7 +939,7 @@
   }
 
   function rotate() {
-    if (!state.pdf) return;
+    if (!state.pdf || state.preparing) return;
     state.rotation = (state.rotation + 90) % 360;
     render();
   }
@@ -979,7 +962,7 @@
   elements.fit.addEventListener("change", () => {
     settings.fit = elements.fit.value;
     saveSettings();
-    if (state.pdf) render({ preserveCenter: false });
+    if (state.pdf && !state.preparing) render({ preserveCenter: false });
   });
   elements.brightness.addEventListener("input", () => {
     settings.brightness = clamp(Number(elements.brightness.value) || 100, 50, 150);
@@ -1004,7 +987,7 @@
       elements.settings.open = false;
       return;
     }
-    if (!state.pdf || event.altKey || event.ctrlKey || event.metaKey ||
+    if (!state.pdf || state.preparing || event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.("input,textarea,select,button,summary,[contenteditable]")) return;
     if (["ArrowRight", "PageDown"].includes(event.key)) { event.preventDefault(); changePage(state.page + 1); }
     else if (["ArrowLeft", "PageUp"].includes(event.key)) { event.preventDefault(); changePage(state.page - 1); }
