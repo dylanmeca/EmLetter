@@ -138,11 +138,8 @@
 .pdf-reader-ocr-layer{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;line-height:1;text-align:initial;user-select:text;-webkit-user-select:text}
 .pdf-reader-ocr-word{position:absolute;display:block;transform-origin:0 0;color:transparent!important;white-space:pre;pointer-events:auto;cursor:text;font-family:Arial,sans-serif;font-weight:400;user-select:text;-webkit-user-select:text}
 .pdf-reader-ocr-word::selection{color:transparent;background:#779bc899}
-.pdf-reader-bottom .pdf-reader-ocr-progress{font:600 10px/1.25 Inter,'Segoe UI',Arial,sans-serif;color:#c2d6fe;max-width:35%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
-@media(max-width:650px){.pdf-reader-bottom .pdf-reader-ocr-progress{max-width:30%;font-size:9px}}
 @media(max-width:400px){
  .pdf-reader-bottom{gap:6px}
  .pdf-reader-bottom #pdf-status{max-width:34%}
- .pdf-reader-bottom .pdf-reader-ocr-progress{max-width:25%}
  .pdf-reader-bottom input[type=range]{min-width:60px}
 }
