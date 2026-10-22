@@ -20,7 +20,8 @@
     fullscreenIcon: $("pdf-fullscreen-icon"),
     stage: $("pdf-reader-stage"), empty: $("pdf-empty"), scroll: $("pdf-scroll"),
     sheet: $("pdf-sheet"), canvas: $("pdf-canvas"), text: $("pdf-text-layer"),
-    annotations: $("pdf-annotation-layer"), loading: $("pdf-loading"),
+    annotations: $("pdf-annotation-layer"), redactions: $("pdf-redaction-layer"),
+    redactToggle: $("pdf-redaction-toggle"), redactDownload: $("pdf-redaction-download"), loading: $("pdf-loading"),
     loadingText: $("pdf-loading-text"), error: $("pdf-error"), status: $("pdf-status"), drop: $("pdf-drop"),
   };
   if (!elements.stage) return;
@@ -59,6 +60,8 @@
     zoom: 1, rotation: 0, fileName: "", renderTask: null, textTask: null,
     revision: 0, loadingRevision: 0, errorTimer: null, resizeTimer: null, dragDepth: 0,
     fallbackFullscreen: false, previousBodyOverflow: "",
+    viewport: null, redactionMode: false, redactionBoxes: new Map(), drawing: null,
+    exporting: false, exportLibPromise: null,
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -103,7 +106,10 @@
     elements.prev.disabled = !opened || state.page <= 1;
     elements.next.disabled = !opened || state.page >= state.total;
     elements.range.disabled = !opened || state.total < 2;
-    elements.close.disabled = !opened;
+    elements.close.disabled = !opened || state.exporting;
+    elements.input.disabled = state.exporting;
+    elements.redactToggle.disabled = !opened || state.exporting;
+    elements.redactDownload.disabled = !opened || state.exporting || !hasRedactions();
     elements.rotate.disabled = !opened;
     elements.rotateMobile.disabled = !opened;
     elements.zoomOut.disabled = !opened || state.zoom <= .5;
@@ -120,6 +126,9 @@
     state.textTask = null;
     elements.text.replaceChildren();
     elements.annotations.replaceChildren();
+    elements.redactions.replaceChildren();
+    state.viewport = null;
+    state.drawing = null;
   }
 
   // Pantalla completa nativa cuando está disponible. Safari en iPhone y algunos
@@ -209,6 +218,8 @@
     state.zoom = 1;
     state.rotation = 0;
     state.fileName = "";
+    state.redactionBoxes.clear();
+    setRedactionMode(false);
     elements.scroll.hidden = true;
     elements.empty.hidden = false;
     elements.canvas.width = elements.canvas.height = 0;
@@ -238,8 +249,9 @@
   }
 
   function applyTheme() {
-    const isDark = settings.theme === "dark" ||
-      (settings.theme === "auto" && canvasLooksLight(elements.canvas));
+    // Mientras se censura, mostrar el fondo original para distinguir las barras negras.
+    const isDark = !state.redactionMode && (settings.theme === "dark" ||
+      (settings.theme === "auto" && canvasLooksLight(elements.canvas)));
     elements.canvas.classList.toggle("pdf-reader-dark", isDark);
   }
 
@@ -360,9 +372,11 @@
       await state.renderTask.promise;
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
       applyTheme();
+      state.viewport = viewport;
+      paintRedactions();
       await Promise.allSettled([renderText(page, viewport, renderToken), renderLinks(page, viewport, renderToken)]);
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
-      setStatus(`Página ${state.page} de ${state.total}`);
+      setStatus(state.redactionMode ? "Lápiz activo: pulsa una palabra o arrastra para cubrir un área" : `Página ${state.page} de ${state.total}`);
       requestAnimationFrame(() => {
         if (renderToken !== state.revision) return;
         if (preserveCenter) {
@@ -384,7 +398,7 @@
   }
 
   async function openFile(file) {
-    if (!file) return;
+    if (!file || state.exporting) return;
     if (!(/\.pdf$/i.test(file.name) || file.type === "application/pdf")) {
       showError("Selecciona un documento PDF.");
       return;
@@ -433,6 +447,7 @@
   }
 
   async function closeFile() {
+    if (state.exporting) return;
     await exitReaderFullscreen();
     ++state.loadingRevision;
     await discardDocument();
@@ -448,6 +463,236 @@
     state.page = target;
     render();
   }
+
+  // Las censuras se guardan como rectángulos en coordenadas originales del PDF.
+  // La exportación rasteriza TODAS las páginas y no copia bytes ni objetos del PDF de origen:
+  // dibujar solo una barra en un PDF vectorial dejaría el texto extraíble debajo.
+  function hasRedactions() {
+    for (const boxes of state.redactionBoxes.values()) if (boxes.length) return true;
+    return false;
+  }
+
+  function setRedactionMode(active) {
+    state.redactionMode = !!active && !!state.pdf && !state.exporting;
+    state.drawing = null;
+    elements.redactions.classList.toggle("is-active", state.redactionMode);
+    elements.redactToggle.setAttribute("aria-pressed", String(state.redactionMode));
+    elements.redactToggle.setAttribute("aria-label", state.redactionMode ? "Desactivar lápiz de censura" : "Activar lápiz de censura");
+    elements.redactToggle.title = state.redactionMode ? "Desactivar lápiz de censura" : "Activar lápiz de censura";
+    elements.redactDownload.hidden = !state.redactionMode;
+    if (state.pdf && elements.canvas.width) applyTheme();
+    paintRedactions();
+    if (state.redactionMode) setStatus("Lápiz activo: pulsa una palabra o arrastra para cubrir un área");
+    else if (state.pdf) setStatus(`Página ${state.page} de ${state.total}`);
+    updateUI();
+  }
+
+  function clampSheetPoint(clientX, clientY) {
+    const rect = elements.sheet.getBoundingClientRect();
+    return {
+      x: clamp(clientX - rect.left, 0, rect.width),
+      y: clamp(clientY - rect.top, 0, rect.height),
+    };
+  }
+
+  function boxFromScreenRect(left, top, right, bottom) {
+    if (!state.viewport) return null;
+    const sheetRect = elements.sheet.getBoundingClientRect();
+    const width = sheetRect.width;
+    const height = sheetRect.height;
+    const x1 = clamp(left - sheetRect.left, 0, width);
+    const y1 = clamp(top - sheetRect.top, 0, height);
+    const x2 = clamp(right - sheetRect.left, 0, width);
+    const y2 = clamp(bottom - sheetRect.top, 0, height);
+    if (Math.abs(x2 - x1) < 1 || Math.abs(y2 - y1) < 1) return null;
+    // La hoja redondea a enteros, mientras que el viewport tiene decimales.
+    const a = state.viewport.convertToPdfPoint(x1 * state.viewport.width / width, y1 * state.viewport.height / height);
+    const b = state.viewport.convertToPdfPoint(x2 * state.viewport.width / width, y2 * state.viewport.height / height);
+    return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+  }
+
+  function paintRedactions() {
+    elements.redactions.replaceChildren();
+    if (!state.viewport || !state.pdf) return;
+    const boxes = state.redactionBoxes.get(state.page) || [];
+    const factorX = elements.sheet.clientWidth / state.viewport.width;
+    const factorY = elements.sheet.clientHeight / state.viewport.height;
+    for (const box of boxes) {
+      const coords = state.viewport.convertToViewportRectangle(box);
+      const node = document.createElement("div");
+      node.className = "pdf-reader-redaction-mark";
+      node.style.left = `${Math.min(coords[0], coords[2]) * factorX}px`;
+      node.style.top = `${Math.min(coords[1], coords[3]) * factorY}px`;
+      node.style.width = `${Math.abs(coords[2] - coords[0]) * factorX}px`;
+      node.style.height = `${Math.abs(coords[3] - coords[1]) * factorY}px`;
+      elements.redactions.appendChild(node);
+    }
+  }
+
+  function appendRedaction(rectangles) {
+    if (!state.pdf || !state.viewport) return;
+    const boxes = (state.redactionBoxes.get(state.page) || []).slice();
+    for (const rect of rectangles) {
+      if (rect && rect[2] > rect[0] && rect[3] > rect[1]) boxes.push(rect);
+    }
+    if (!boxes.length) return;
+    state.redactionBoxes.set(state.page, boxes);
+    paintRedactions();
+    updateUI();
+    setStatus(`${boxes.length} ${boxes.length === 1 ? "censura" : "censuras"} en la página ${state.page}. Descarga el PDF para aplicar las censuras definitivamente.`);
+  }
+
+  // PDF.js divide el texto en fragmentos: Range permite encontrar la PALABRA bajo
+  // el cursor, no bloquear accidentalmente toda la línea del documento.
+  function wordUnderPointer(clientX, clientY) {
+    for (const span of elements.text.querySelectorAll("span")) {
+      const textNode = span.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE || !textNode.length) continue;
+      const bounds = span.getBoundingClientRect();
+      if (clientX < bounds.left - 2 || clientX > bounds.right + 2 ||
+          clientY < bounds.top - 2 || clientY > bounds.bottom + 2) continue;
+      const content = textNode.textContent;
+      const matches = content.matchAll(/\S+/gu);
+      for (const match of matches) {
+        const range = document.createRange();
+        range.setStart(textNode, match.index);
+        range.setEnd(textNode, match.index + match[0].length);
+        for (const wordRect of range.getClientRects()) {
+          if (clientX < wordRect.left - 2 || clientX > wordRect.right + 2 ||
+              clientY < wordRect.top - 2 || clientY > wordRect.bottom + 2) continue;
+          // Un margen evita dejar píxeles de los bordes/antialiasing de las letras.
+          return boxFromScreenRect(wordRect.left - 2, wordRect.top - 2, wordRect.right + 2, wordRect.bottom + 2);
+        }
+      }
+    }
+    return null;
+  }
+
+  function drawSelectionPreview(start, end) {
+    elements.redactions.querySelector(".pdf-reader-redaction-preview")?.remove();
+    const preview = document.createElement("div");
+    preview.className = "pdf-reader-redaction-preview";
+    preview.style.left = `${Math.min(start.x, end.x)}px`;
+    preview.style.top = `${Math.min(start.y, end.y)}px`;
+    preview.style.width = `${Math.abs(end.x - start.x)}px`;
+    preview.style.height = `${Math.abs(end.y - start.y)}px`;
+    elements.redactions.appendChild(preview);
+  }
+
+  elements.redactions.addEventListener("pointerdown", (event) => {
+    if (!state.redactionMode || !state.viewport || event.button !== 0) return;
+    event.preventDefault();
+    const point = clampSheetPoint(event.clientX, event.clientY);
+    state.drawing = { id: event.pointerId, start: point, last: point, clientX: event.clientX, clientY: event.clientY };
+    elements.redactions.setPointerCapture(event.pointerId);
+  });
+  elements.redactions.addEventListener("pointermove", (event) => {
+    if (!state.drawing || event.pointerId !== state.drawing.id) return;
+    const point = clampSheetPoint(event.clientX, event.clientY);
+    state.drawing.last = point;
+    if (Math.hypot(point.x - state.drawing.start.x, point.y - state.drawing.start.y) > 5) {
+      drawSelectionPreview(state.drawing.start, point);
+    }
+  });
+  elements.redactions.addEventListener("pointerup", (event) => {
+    const drawing = state.drawing;
+    if (!drawing || event.pointerId !== drawing.id) return;
+    state.drawing = null;
+    elements.redactions.querySelector(".pdf-reader-redaction-preview")?.remove();
+    const end = clampSheetPoint(event.clientX, event.clientY);
+    if (Math.hypot(end.x - drawing.start.x, end.y - drawing.start.y) > 5) {
+      const sheet = elements.sheet.getBoundingClientRect();
+      appendRedaction([boxFromScreenRect(
+        sheet.left + drawing.start.x, sheet.top + drawing.start.y,
+        sheet.left + end.x, sheet.top + end.y,
+      )]);
+    } else {
+      const word = wordUnderPointer(event.clientX, event.clientY);
+      if (word) appendRedaction([word]);
+      else setStatus("No hay texto reconocible aquí. Arrastra el lápiz para cubrir una zona, incluso en documentos escaneados.");
+    }
+  });
+  elements.redactions.addEventListener("pointercancel", () => {
+    state.drawing = null;
+    elements.redactions.querySelector(".pdf-reader-redaction-preview")?.remove();
+  });
+
+  async function exportRedactedPdf() {
+    if (!state.pdf || state.exporting || !hasRedactions()) return;
+    const original = state.pdf;
+    state.exporting = true;
+    updateUI();
+    clearError();
+    try {
+      setLoading("Preparando PDF censurado…");
+      if (!state.exportLibPromise) {
+        state.exportLibPromise = import("https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm").catch((error) => {
+          state.exportLibPromise = null;
+          throw error;
+        });
+      }
+      const { PDFDocument } = await state.exportLibPromise;
+      const result = await PDFDocument.create();
+      for (let number = 1; number <= state.total; number++) {
+        setLoading(`Censurando página ${number} de ${state.total}…`);
+        // Dar tiempo al navegador para pintar el progreso antes del siguiente render.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const page = await original.getPage(number);
+        const base = page.getViewport({ scale: 1, rotation: page.rotate });
+        const scale = Math.min(2.5, Math.sqrt(16000000 / (base.width * base.height)));
+        const viewport = page.getViewport({ scale, rotation: page.rotate });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.ceil(viewport.width));
+        canvas.height = Math.max(1, Math.ceil(viewport.height));
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (!ctx) throw new Error("No se pudo crear el lienzo para exportar.");
+        try {
+          await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
+          ctx.fillStyle = "#000000";
+          for (const box of state.redactionBoxes.get(number) || []) {
+            const rect = viewport.convertToViewportRectangle(box);
+            const left = Math.floor(Math.min(rect[0], rect[2])) - 2;
+            const top = Math.floor(Math.min(rect[1], rect[3])) - 2;
+            const right = Math.ceil(Math.max(rect[0], rect[2])) + 2;
+            const bottom = Math.ceil(Math.max(rect[1], rect[3])) + 2;
+            ctx.fillRect(left, top, right - left, bottom - top);
+          }
+          // Solo se incorpora una imagen de píxeles por página: no quedan textos,
+          // capas, adjuntos ni metadatos del PDF original debajo de las barras.
+          const blob = await new Promise((resolve, reject) => canvas.toBlob(
+            (value) => value ? resolve(value) : reject(new Error("No se pudo convertir la página a imagen.")),
+            "image/jpeg", .94,
+          ));
+          const img = await result.embedJpg(await blob.arrayBuffer());
+          const output = result.addPage([base.width, base.height]);
+          output.drawImage(img, { x: 0, y: 0, width: base.width, height: base.height });
+        } finally {
+          canvas.width = canvas.height = 0;
+        }
+      }
+      setLoading("Guardando PDF censurado…");
+      const bytes = await result.save({ useObjectStreams: true });
+      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = (state.fileName.replace(/\.pdf$/i, "") || "documento") + "-censurado.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      setStatus("PDF censurado descargado. El documento exportado está aplanado en imágenes.");
+    } catch (error) {
+      console.error("EmLetter: error al exportar PDF censurado:", error);
+      showError("No se pudo descargar el PDF censurado. Comprueba tu conexión y la memoria disponible.");
+    } finally {
+      state.exporting = false;
+      hideLoading();
+      updateUI();
+    }
+  }
+
+  elements.redactToggle.addEventListener("click", () => setRedactionMode(!state.redactionMode));
+  elements.redactDownload.addEventListener("click", exportRedactedPdf);
 
   function setZoom(value) {
     if (!state.pdf) return;
