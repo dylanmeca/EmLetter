@@ -111,3 +111,25 @@
  .pdf-reader-controls .pdf-reader-fullscreen-toggle #pdf-fullscreen-icon{font-size:15px}
  .pdf-reader-card:fullscreen .pdf-reader-toolbar,.pdf-reader-card.pdf-reader-fullscreen-fallback .pdf-reader-toolbar{padding-top:max(11px,env(safe-area-inset-top))}
 }
+
+/* Censura local: los rectángulos se ajustan al viewport del PDF, no al zoom del navegador. */
+.pdf-reader-redaction-actions{display:flex;align-items:center;gap:7px;margin-left:auto;min-width:0}
+.pdf-reader-settings{margin-left:0}
+.pdf-reader-controls .pdf-reader-redaction-toggle,.pdf-reader-controls .pdf-reader-redaction-download{display:inline-flex;justify-content:center;align-items:center;gap:7px;min-height:34px;height:34px;padding:5px 10px;background:#192538;border:1px solid #40506c;border-radius:7px;color:#d7e2f6;white-space:nowrap;cursor:pointer;font-size:12px;font-weight:650}
+.pdf-reader-controls .pdf-reader-redaction-toggle{width:36px;min-width:36px;padding:3px}
+.pdf-reader-redaction-toggle[aria-pressed="true"]{background:#473039;border-color:#dc8b99;color:#fff0f0}
+.pdf-reader-pencil-symbol{position:relative;display:inline-block;font-family:Georgia,serif;font-size:23px;line-height:1;transform:rotate(-15deg)}
+.pdf-reader-pencil-x{display:none;position:absolute;right:-7px;top:-6px;color:#ffacb7;font:900 19px/1 Inter,'Segoe UI',sans-serif;text-shadow:0 1px 2px #182131,-1px -1px #182131}
+.pdf-reader-redaction-toggle[aria-pressed="true"] .pdf-reader-pencil-x{display:block}
+.pdf-reader-redaction-download span:first-child{font-size:17px;line-height:1}
+.pdf-reader-redaction-layer{position:absolute;inset:0;z-index:5;overflow:hidden;pointer-events:none;touch-action:auto}
+.pdf-reader-redaction-layer.is-active{pointer-events:auto;touch-action:none;cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='m4 26 4-9L23 2l7 7-15 15z' fill='%23fff' stroke='%23172336' stroke-width='2'/%3E%3Cpath d='m8 17 7 7M4 26l8-2' fill='none' stroke='%23172336' stroke-width='2'/%3E%3C/svg%3E") 4 27,crosshair}
+.pdf-reader-redaction-mark{position:absolute;background:#000;pointer-events:none}
+.pdf-reader-redaction-preview{position:absolute;border:1px dashed #fff;background:#000b;outline:1px solid #111;pointer-events:none}
+@media(max-width:650px){
+ .pdf-reader-redaction-actions{gap:5px}
+ .pdf-reader-controls .pdf-reader-redaction-toggle,.pdf-reader-controls .pdf-reader-redaction-download{min-height:31px;height:31px;padding:5px 7px}
+ .pdf-reader-controls .pdf-reader-redaction-toggle{min-width:31px;width:31px}
+ .pdf-reader-redaction-download-label{font-size:0}
+ .pdf-reader-redaction-download-label::after{content:"PDF";font-size:11px}
+}
