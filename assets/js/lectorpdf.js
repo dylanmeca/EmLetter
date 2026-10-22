@@ -28,6 +28,7 @@
     ocrEnabled: $("pdf-ocr-enabled"),
     brightness: $("pdf-brightness"), brightnessValue: $("pdf-brightness-value"),
     blueLight: $("pdf-blue-light"), blueLightValue: $("pdf-blue-light-value"),
+    temperatureMatrix: $("pdf-reader-temperature-matrix"),
     card: document.querySelector(".pdf-reader-card"),
     fullscreen: $("pdf-fullscreen-toggle"), fullscreenLabel: $("pdf-fullscreen-label"),
     fullscreenIcon: $("pdf-fullscreen-icon"),
@@ -59,14 +60,49 @@
   elements.brightness.value = String(settings.brightness);
   elements.blueLight.value = String(settings.blueLight);
 
+  // Aproximación del locus planckiano: temperatura correlacionada (K) ->
+  // cromaticidad CIE xy -> blanco lineal sRGB. El factor R se conserva en 1;
+  // G y B se atenúan por canal, sin recolorear el PDF mediante un velo ámbar.
+  // No es un ajuste de la retroiluminación ni un filtro óptico calibrado.
+  function whitepointLinearRgb(kelvin) {
+    const t = kelvin;
+    const x = t <= 4000
+      ? -.2661239e9 / t ** 3 - .2343580e6 / t ** 2 + .8776956e3 / t + .179910
+      : -3.0258469e9 / t ** 3 + 2.1070379e6 / t ** 2 + .2226347e3 / t + .240390;
+    const y = t <= 4000
+      ? -.9549476 * x ** 3 - 1.37418593 * x ** 2 + 2.09137015 * x - .16748867
+      : 3.081758 * x ** 3 - 5.8733867 * x ** 2 + 3.75112997 * x - .37001483;
+    const X = x / y;
+    const Z = (1 - x - y) / y;
+    return [
+      3.2404542 * X - 1.5371385 - .4985314 * Z,
+      -.969266 * X + 1.8760108 + .0415560 * Z,
+      .0556434 * X - .2040259 + 1.0572252 * Z,
+    ];
+  }
+  const neutralWhite = whitepointLinearRgb(6500);
   function applyReadingFilters() {
-    elements.sheet.style.setProperty("--pdf-reader-brightness", String(settings.brightness / 100));
-    // Una capa ámbar reduce visualmente los azules, sin alterar el PDF original.
-    elements.sheet.style.setProperty("--pdf-reader-warmth", String(settings.blueLight / 100 * .65));
+    const kelvin = Math.round((6500 - 3800 * settings.blueLight / 100) / 50) * 50;
+    const target = whitepointLinearRgb(kelvin);
+    const redRatio = target[0] / neutralWhite[0];
+    const greenGain = clamp((target[1] / neutralWhite[1]) / redRatio, 0, 1);
+    const blueGain = clamp((target[2] / neutralWhite[2]) / redRatio, 0, 1);
+    elements.temperatureMatrix.setAttribute("values", [
+      "1 0 0 0 0",
+      `0 ${greenGain.toFixed(5)} 0 0 0`,
+      `0 0 ${blueGain.toFixed(5)} 0 0`,
+      "0 0 0 1 0",
+    ].join(" "));
+    // El filtro SVG opera en RGB lineal: la atenuación se aplica sobre la
+    // intensidad del canal, no mediante transparencia ni mezcla naranja.
+    // Al 0% no se procesa la hoja con el filtro SVG.
+    elements.sheet.style.filter = settings.blueLight
+      ? `url("#pdf-reader-temperature-filter") brightness(${settings.brightness / 100})`
+      : `brightness(${settings.brightness / 100})`;
     elements.brightnessValue.textContent = `${settings.brightness}%`;
-    elements.blueLightValue.textContent = `${settings.blueLight}%`;
+    elements.blueLightValue.textContent = `${settings.blueLight}% · ${kelvin} K`;
     elements.brightness.setAttribute("aria-valuetext", `${settings.brightness}%`);
-    elements.blueLight.setAttribute("aria-valuetext", `${settings.blueLight}%`);
+    elements.blueLight.setAttribute("aria-valuetext", `${settings.blueLight}%, temperatura de color aproximada ${kelvin} kelvin`);
   }
   applyReadingFilters();
 
