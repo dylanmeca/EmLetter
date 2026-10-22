@@ -25,6 +25,7 @@
     current: $("pdf-current"), total: $("pdf-total"), range: $("pdf-page-range"),
     zoomOut: $("pdf-zoom-out"), zoomIn: $("pdf-zoom-in"), zoomReset: $("pdf-zoom-reset"),
     rotate: $("pdf-rotate"), rotateMobile: $("pdf-rotate-mobile"), theme: $("pdf-theme"), fit: $("pdf-fit"), settings: $("pdf-preferences"),
+    ocrEnabled: $("pdf-ocr-enabled"),
     brightness: $("pdf-brightness"), brightnessValue: $("pdf-brightness-value"),
     blueLight: $("pdf-blue-light"), blueLightValue: $("pdf-blue-light-value"),
     card: document.querySelector(".pdf-reader-card"),
@@ -39,11 +40,12 @@
   if (!elements.stage) return;
 
   const SETTINGS_KEY = "emletter-pdf-reader-prefs-v1";
-  let settings = { theme: "auto", fit: "width", brightness: 100, blueLight: 0 };
+  let settings = { theme: "auto", fit: "width", brightness: 100, blueLight: 0, ocrEnabled: true };
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
     if (["auto", "original", "dark"].includes(stored.theme)) settings.theme = stored.theme;
     if (["width", "page"].includes(stored.fit)) settings.fit = stored.fit;
+    if (typeof stored.ocrEnabled === "boolean") settings.ocrEnabled = stored.ocrEnabled;
     if (typeof stored.brightness === "number" && Number.isFinite(stored.brightness)) {
       settings.brightness = clamp(Math.round(stored.brightness / 5) * 5, 50, 150);
     }
@@ -53,6 +55,7 @@
   } catch (_) { /* El lector también funciona sin almacenamiento. */ }
   elements.theme.value = settings.theme;
   elements.fit.value = settings.fit;
+  elements.ocrEnabled.checked = settings.ocrEnabled;
   elements.brightness.value = String(settings.brightness);
   elements.blueLight.value = String(settings.blueLight);
 
@@ -74,6 +77,7 @@
     fallbackFullscreen: false, previousBodyOverflow: "",
     viewport: null, redactionMode: false, redactionBoxes: new Map(), drawing: null,
     exporting: false, exportLibPromise: null, ocrJob: null, viewportPage: 0, preparing: false,
+    ocrPreparation: 0,
   };
 
   function setStatus(value) { elements.status.textContent = value; }
@@ -225,6 +229,7 @@
   syncFullscreenControl();
 
   async function discardDocument() {
+    ++state.ocrPreparation;
     cancelOcr();
     stopRender();
     const previous = state.pdf;
@@ -342,7 +347,7 @@
   function paintOcrText() {
     elements.ocrLayer.replaceChildren();
     if (!state.pdf || !state.viewport || state.viewportPage !== state.page) return;
-    const result = state.ocrJob?.pages.get(state.page);
+    const result = settings.ocrEnabled ? state.ocrJob?.pages.get(state.page) : null;
     if (!result?.words?.length) return;
     const viewport = state.viewport;
     const pageWidth = elements.sheet.clientWidth;
@@ -619,6 +624,34 @@
     }
   }
 
+  // El interruptor puede cambiar mientras se reconoce un documento.
+  // Un número de preparación evita que un OCR cancelado vuelva a mostrar una vista vieja.
+  async function preparePdfForReading(pdf) {
+    if (state.pdf !== pdf) return;
+    const loadId = state.loadingRevision;
+    const preparationId = ++state.ocrPreparation;
+    cancelOcr();
+    const needsOcr = settings.ocrEnabled;
+    state.preparing = needsOcr;
+    elements.scroll.hidden = true;
+    if (needsOcr) setLoading("Preparando reconocimiento de texto…");
+    updateUI();
+    const result = needsOcr ? await beginOcr(pdf) : { failed: false };
+    if (loadId !== state.loadingRevision || preparationId !== state.ocrPreparation || state.pdf !== pdf) return;
+    state.preparing = false;
+    elements.scroll.hidden = false;
+    updateUI();
+    await render();
+    if (loadId !== state.loadingRevision || preparationId !== state.ocrPreparation || state.pdf !== pdf) return;
+    if (needsOcr && result.failed) {
+      // Advertir sobre un fallo real, sin poner mensajes de OCR en la barra inferior.
+      elements.error.textContent = "No se pudo reconocer todo el texto. Puedes leer el PDF y censurar áreas manualmente.";
+      elements.error.hidden = false;
+      clearTimeout(state.errorTimer);
+      state.errorTimer = setTimeout(() => { elements.error.hidden = true; }, 6500);
+    }
+  }
+
   async function openFile(file) {
     if (!file || state.exporting) return;
     if (!(/\.pdf$/i.test(file.name) || file.type === "application/pdf")) {
@@ -643,7 +676,7 @@
       catch (error) { await documentTask.destroy(); throw error; }
       if (attempt !== state.loadingRevision) { await pdf.destroy(); return; }
       state.pdf = pdf;
-      state.preparing = true;
+      state.preparing = settings.ocrEnabled;
       state.page = 1;
       state.total = pdf.numPages;
       state.fileName = file.name;
@@ -654,20 +687,7 @@
       elements.scroll.hidden = true;
       elements.settings.open = false;
       updateUI();
-      const ocrResult = await beginOcr(pdf);
-      if (attempt !== state.loadingRevision || state.pdf !== pdf) return;
-      state.preparing = false;
-      elements.scroll.hidden = false;
-      updateUI();
-      await render();
-      if (attempt !== state.loadingRevision || state.pdf !== pdf) return;
-      if (ocrResult.failed) {
-        // Advertir sin escribir mensajes OCR en la barra inferior.
-        elements.error.textContent = "No se pudo reconocer todo el texto. Puedes leer el PDF y censurar áreas manualmente.";
-        elements.error.hidden = false;
-        clearTimeout(state.errorTimer);
-        state.errorTimer = setTimeout(() => { elements.error.hidden = true; }, 6500);
-      }
+      await preparePdfForReading(pdf);
     } catch (error) {
       if (attempt !== state.loadingRevision) return;
       console.error("EmLetter PDF:", error);
@@ -958,6 +978,17 @@
     settings.theme = elements.theme.value;
     saveSettings();
     if (state.pdf) applyTheme();
+  });
+  elements.ocrEnabled.addEventListener("change", () => {
+    settings.ocrEnabled = elements.ocrEnabled.checked;
+    saveSettings();
+    if (!state.pdf) return;
+    // Cambiar la preferencia afecta también al documento abierto. Si el OCR
+    // sigue en curso, se cancela y la página aparece con el render estándar.
+    preparePdfForReading(state.pdf).catch((error) => {
+      console.error("EmLetter: no se pudo actualizar la preferencia OCR", error);
+      if (state.pdf) showError("No se pudo actualizar el lector. Intenta abrir de nuevo el PDF.");
+    });
   });
   elements.fit.addEventListener("change", () => {
     settings.fit = elements.fit.value;
