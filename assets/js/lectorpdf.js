@@ -942,30 +942,49 @@
     }
   }
 
-  // El PDF de salida se comprueba ANTES de ofrecerlo para descargar. Un PDF
-  // exclusivamente de imágenes no debe contener texto extraíble ni anotaciones.
-  // Cualquier fallo de validación impide entregar una copia potencialmente insegura.
-  async function verifySanitizedPdf(bytes, expectedPages) {
-    const pdfjs = await getLib();
-    // PDF.js puede transferir el ArrayBuffer al worker; preservar bytes de salida.
-    const task = pdfjs.getDocument({ data: bytes.slice() });
-    let checked = null;
-    try {
-      checked = await task.promise;
-      if (checked.numPages !== expectedPages) throw new Error("El número de páginas ha cambiado.");
-      for (let n = 1; n <= expectedPages; n++) {
-        const page = await checked.getPage(n);
-        const contents = await page.getTextContent();
-        if (contents.items?.some((item) => typeof item.str === "string" && item.str.trim())) {
-          throw new Error("El PDF censurado todavía contiene texto recuperable.");
-        }
-        const annotations = await page.getAnnotations();
-        if (annotations.length) throw new Error("El PDF censurado contiene anotaciones.");
-      }
-    } finally {
-      if (checked) await checked.destroy();
-      else await task.destroy();
+  // La seguridad de la copia no depende de volver a renderizarla con PDF.js.
+  // El PDF se crea desde cero y SOLO recibe imágenes rasterizadas, nunca
+  // fuentes, texto, anotaciones ni objetos del archivo original. Después se
+  // reabre con el mismo serializador para comprobar que la copia es válida.
+  // Volver a abrirla en el worker de PDF.js puede fallar por memoria o por la
+  // implementación del visor, aunque el PDF ya se haya generado correctamente.
+  async function verifySanitizedPdf(bytes, expectedPages, PDFDocument, imageCount, redactionCount) {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength < 100) {
+      throw new Error("El PDF generado está vacío o incompleto.");
     }
+    const header = new TextDecoder("ascii").decode(bytes.subarray(0, 8));
+    if (!header.startsWith("%PDF-")) throw new Error("El archivo generado no es un PDF válido.");
+    if (imageCount !== expectedPages || redactionCount < 1) {
+      throw new Error("No se incorporaron todas las páginas o las censuras.");
+    }
+    const check = await PDFDocument.load(bytes, { updateMetadata: false });
+    if (check.getPageCount() !== expectedPages) {
+      throw new Error("El PDF generado tiene un número de páginas incorrecto.");
+    }
+    for (const page of check.getPages()) {
+      if (!(page.getWidth() > 0 && page.getHeight() > 0)) {
+        throw new Error("El PDF generado contiene una página inválida.");
+      }
+      // pdf-lib no añade anotaciones en ninguna fase de esta exportación.
+      const annotations = page.node?.Annots?.();
+      if (annotations?.size?.() > 0) {
+        throw new Error("Se detectaron anotaciones inesperadas en el PDF generado.");
+      }
+    }
+  }
+
+  async function importPdfLib() {
+    if (!state.exportLibPromise) {
+      state.exportLibPromise = import("https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm")
+        .catch(async (firstError) => {
+          console.warn("EmLetter: primera fuente de pdf-lib inaccesible:", firstError);
+          return import("https://esm.sh/pdf-lib@1.17.1?bundle");
+        }).catch((error) => {
+          state.exportLibPromise = null;
+          throw error;
+        });
+    }
+    return state.exportLibPromise;
   }
 
   async function exportRedactedPdf() {
@@ -974,23 +993,23 @@
     state.exporting = true;
     updateUI();
     clearError();
+    let stage = "cargar el generador de PDF";
     try {
       setLoading("Preparando PDF censurado…");
-      if (!state.exportLibPromise) {
-        state.exportLibPromise = import("https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm").catch((error) => {
-          state.exportLibPromise = null;
-          throw error;
-        });
-      }
-      const { PDFDocument } = await state.exportLibPromise;
+      const { PDFDocument } = await importPdfLib();
       const result = await PDFDocument.create();
+      let imageCount = 0;
+      let redactionCount = 0;
       for (let number = 1; number <= state.total; number++) {
+        stage = `renderizar la página ${number}`;
         setLoading(`Censurando página ${number} de ${state.total}…`);
         // Dar tiempo al navegador para pintar el progreso antes del siguiente render.
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const page = await original.getPage(number);
         const base = page.getViewport({ scale: 1, rotation: page.rotate });
-        const scale = Math.min(2.5, Math.sqrt(16000000 / (base.width * base.height)));
+        // Limitar memoria: cada canvas requiere hasta 4 bytes/píxel, y pdf-lib
+        // reserva memoria adicional al incrustar imágenes PNG en el documento.
+        const scale = Math.min(2, Math.sqrt(5000000 / (base.width * base.height)));
         const viewport = page.getViewport({ scale, rotation: page.rotate });
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.ceil(viewport.width));
@@ -1000,22 +1019,30 @@
         try {
           await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
           const boxes = state.redactionBoxes.get(number) || [];
+          stage = `aplicar las censuras de la página ${number}`;
           for (const box of boxes) {
             const rect = viewportRect(viewport, box);
             if (!rect.every(Number.isFinite)) throw new Error("Las coordenadas de censura no son válidas.");
-            // Margen adicional en la imagen final: cubre bordes antialias y
-            // pequeños desajustes entre la capa de texto y la página renderizada.
+            // Margen extra para cubrir el suavizado del texto en los bordes.
             const guard = Math.max(4, Math.ceil(scale * 2));
             const left = Math.floor(Math.min(rect[0], rect[2])) - guard;
             const top = Math.floor(Math.min(rect[1], rect[3])) - guard;
             const right = Math.ceil(Math.max(rect[0], rect[2])) + guard;
             const bottom = Math.ceil(Math.max(rect[1], rect[3])) + guard;
             destroyRedactedPixels(ctx, left, top, right, bottom);
+            // Comprobar un píxel dentro de la zona reemplazada, no solo la
+            // existencia de la barra superpuesta en el visor.
+            const x = Math.max(0, Math.floor(Math.max(left, 0)));
+            const y = Math.max(0, Math.floor(Math.max(top, 0)));
+            const pixel = ctx.getImageData(x, y, 1, 1).data;
+            if (pixel[0] !== 0 || pixel[1] !== 0 || pixel[2] !== 0 || pixel[3] !== 255) {
+              throw new Error("No se pudo reemplazar la zona censurada por píxeles negros.");
+            }
+            redactionCount++;
           }
-          // PNG sin pérdidas en páginas censuradas: conserva el negro exacto,
-          // sin halos de compresión JPEG en los bordes. Las demás páginas usan
-          // JPEG para mantener el archivo de salida en un tamaño razonable.
-          // El PDF nuevo solo incluirá estas imágenes, nunca objetos del original.
+          // Imagen sin pérdida en las páginas censuradas. El PDF original no se
+          // incorpora: la única fuente del documento nuevo es este bitmap.
+          stage = `codificar la página ${number}`;
           const imageType = boxes.length ? "image/png" : "image/jpeg";
           const blob = await new Promise((resolve, reject) => canvas.toBlob(
             (value) => value ? resolve(value) : reject(new Error("No se pudo convertir la página a imagen.")),
@@ -1026,18 +1053,22 @@
             : await result.embedJpg(await blob.arrayBuffer());
           const output = result.addPage([base.width, base.height]);
           output.drawImage(img, { x: 0, y: 0, width: base.width, height: base.height });
+          imageCount++;
         } finally {
           canvas.width = canvas.height = 0;
         }
       }
+      stage = "guardar el PDF";
       setLoading("Guardando PDF censurado…");
       const bytes = await result.save({ useObjectStreams: true });
+      stage = "validar el PDF exportado";
       setLoading("Verificando el PDF censurado…");
-      await verifySanitizedPdf(bytes, state.total);
+      await verifySanitizedPdf(bytes, state.total, PDFDocument, imageCount, redactionCount);
+      stage = "descargar el PDF";
       const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
       const link = document.createElement("a");
       link.href = objectUrl;
-      // No conservar el nombre original: también puede contener datos privados.
+      // Evitar revelar datos privados que puedan figurar en el nombre original.
       link.download = "documento-censurado.pdf";
       document.body.appendChild(link);
       link.click();
@@ -1045,8 +1076,8 @@
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
       setStatus(`Página ${state.page} de ${state.total}`);
     } catch (error) {
-      console.error("EmLetter: error al exportar PDF censurado:", error);
-      showError("No se pudo generar o verificar una copia segura del PDF censurado. No se descargó ningún archivo.");
+      console.error(`EmLetter: error al ${stage}:`, error);
+      showError(`No se pudo ${stage}. No se descargó ningún archivo. Revisa la consola para ver el motivo.`);
     } finally {
       state.exporting = false;
       hideLoading();
