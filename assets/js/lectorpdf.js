@@ -9,10 +9,16 @@
   const OCR_VERSION = "7.0.0";
   const OCR_SCRIPT = `https://cdn.jsdelivr.net/npm/tesseract.js@${OCR_VERSION}/dist/tesseract.min.js`;
   const OCR_WORKER = `https://cdn.jsdelivr.net/npm/tesseract.js@${OCR_VERSION}/dist/worker.min.js`;
-  const OCR_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@6.1.2";
+  const OCR_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0";
   const OCR_LANG = "https://tessdata.projectnaptha.com/4.0.0";
   const $ = (id) => document.getElementById(id);
   const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
+  // PDF.js 6.3 eliminó convertToViewportRectangle: convertir ambas esquinas
+  // mantiene las posiciones correctas con zoom y giros de 0/90/180/270 grados.
+  const viewportRect = (viewport, pdfRect) => [
+    ...viewport.convertToViewportPoint(pdfRect[0], pdfRect[1]),
+    ...viewport.convertToViewportPoint(pdfRect[2], pdfRect[3]),
+  ];
   const elements = {
     input: $("pdf-file-input"), name: $("pdf-document-name"), detail: $("pdf-document-detail"),
     close: $("pdf-close"), prev: $("pdf-prev"), next: $("pdf-next"),
@@ -377,7 +383,7 @@
     const measuring = document.createElement("canvas").getContext("2d");
     const fragment = document.createDocumentFragment();
     for (const word of result.words) {
-      const r = viewport.convertToViewportRectangle(word.box);
+      const r = viewportRect(viewport, word.box);
       const left = Math.min(r[0], r[2]) * sx;
       const top = Math.min(r[1], r[3]) * sy;
       const width = Math.abs(r[2] - r[0]) * sx;
@@ -540,7 +546,7 @@
       if (token !== state.revision) return;
       for (const annotation of annotations) {
         if (!annotation.rect || !(annotation.url || annotation.dest || annotation.action)) continue;
-        const bounds = viewport.convertToViewportRectangle(annotation.rect);
+        const bounds = viewportRect(viewport, annotation.rect);
         const width = Math.abs(bounds[2] - bounds[0]);
         const height = Math.abs(bounds[3] - bounds[1]);
         if (width < 1 || height < 1) continue;
@@ -763,7 +769,7 @@
     const factorX = elements.sheet.clientWidth / state.viewport.width;
     const factorY = elements.sheet.clientHeight / state.viewport.height;
     for (const box of boxes) {
-      const coords = state.viewport.convertToViewportRectangle(box);
+      const coords = viewportRect(state.viewport, box);
       const node = document.createElement("div");
       node.className = "pdf-reader-redaction-mark";
       node.style.left = `${Math.min(coords[0], coords[2]) * factorX}px`;
@@ -897,7 +903,7 @@
           await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
           ctx.fillStyle = "#000000";
           for (const box of state.redactionBoxes.get(number) || []) {
-            const rect = viewport.convertToViewportRectangle(box);
+            const rect = viewportRect(viewport, box);
             const left = Math.floor(Math.min(rect[0], rect[2])) - 2;
             const top = Math.floor(Math.min(rect[1], rect[3])) - 2;
             const right = Math.ceil(Math.max(rect[0], rect[2])) + 2;
