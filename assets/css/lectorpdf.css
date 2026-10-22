@@ -41,7 +41,6 @@
 .pdf-reader-settings-body #pdf-ocr-enabled:checked::before{transform:translateX(17px)}
 .pdf-reader-settings-body #pdf-ocr-enabled:focus-visible{outline:2px solid #b5ccff;outline-offset:3px}
 .pdf-reader-settings-body #pdf-ocr-enabled:disabled{opacity:.5;cursor:not-allowed}
-.pdf-reader-settings-body .pdf-reader-ocr-help{margin:0 0 5px;color:#96a9c6}
 .pdf-reader-settings-body .pdf-reader-range-label{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .pdf-reader-range-label output{font-variant-numeric:tabular-nums;font-size:11px;color:#e2ebfc;font-weight:600}
 .pdf-reader-settings-body input[type=range]{width:100%;height:24px;margin:0 0 4px;accent-color:#b1c6ef;cursor:pointer;touch-action:pan-x}
@@ -54,12 +53,13 @@
 .pdf-reader-empty h2{font:600 22px/1.35 Georgia,serif;color:#e0e7f4;margin:0 0 9px}
 .pdf-reader-empty p{max-width:375px;font:13px/1.65 Inter,'Segoe UI',Arial,sans-serif;color:#91a1ba;margin:0 0 20px}
 .pdf-reader-scroll{height:100%;width:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-color:#40516e transparent;scrollbar-width:thin;padding:14px;touch-action:pan-x pan-y}
-.pdf-reader-sheet{position:relative;margin:0 auto;background:#fff;isolation:isolate;box-shadow:0 10px 35px #0008;filter:brightness(var(--pdf-reader-brightness,1))}
+.pdf-reader-sheet{position:relative;margin:0 auto;background:#fff;isolation:isolate;box-shadow:0 10px 35px #0008}
 /* El matiz se genera mediante una matriz de color SVG; no hay un velo ámbar encima del texto. */
 .pdf-reader-filter-defs{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
-.pdf-reader-settings-body .pdf-reader-blue-light-help{margin:0 0 5px;color:#96a9c6}
-.pdf-reader-sheet #pdf-canvas{position:absolute;left:0;top:0;display:block;max-width:none!important;height:auto;transform-origin:center;background:white}
-.pdf-reader-sheet #pdf-canvas.pdf-reader-dark{filter:invert(.94) hue-rotate(180deg) brightness(.84) contrast(1.07)}
+/* Brillo y balance de color sobre los píxeles renderizados, sin afectar las barras negras,
+   la selección de texto ni los enlaces del documento. */
+.pdf-reader-sheet #pdf-canvas{position:absolute;left:0;top:0;display:block;max-width:none!important;height:auto;transform-origin:center;background:white;--pdf-theme-filter:brightness(1);filter:var(--pdf-theme-filter) url("#pdf-reader-temperature-filter")}
+.pdf-reader-sheet #pdf-canvas.pdf-reader-dark{--pdf-theme-filter:invert(.94) hue-rotate(180deg) brightness(.84) contrast(1.07)}
 .pdf-reader-text-layer{position:absolute;inset:0;z-index:2;overflow:clip;line-height:1;text-align:initial;text-size-adjust:none;-webkit-text-size-adjust:none;forced-color-adjust:none;transform-origin:0 0;pointer-events:auto;user-select:text}
 .pdf-reader-text-layer :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0}
 .pdf-reader-text-layer span{user-select:text;-webkit-user-select:text}
