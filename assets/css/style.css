@@ -254,6 +254,54 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
 .export-stage .ProseMirror-selectednode{outline:0}
 .export-stage .selectedCell{background:transparent}
 .export-stage .paper td,.export-stage .paper th{border-color:var(--accent)}
+/* Movimiento ambiental compartido por el editor, la vista previa y las cartas abiertas.
+   Usar las propiedades independientes rotate/translate mantiene intactos los
+   transforms que free-placement.js emplea para colocar elementos. */
+@keyframes emletter-soft-wind{
+  0%,100%{translate:0 0;rotate:-.65deg}
+  25%{translate:-1px -1.5px;rotate:.45deg}
+  50%{translate:1px -2.5px;rotate:.8deg}
+  75%{translate:1px -.6px;rotate:-.3deg}
+}
+@keyframes emletter-soft-bob{
+  0%,100%{translate:0 0}
+  50%{translate:0 -2.5px}
+}
+@keyframes emletter-soft-glimmer{
+  0%,100%{opacity:.88;filter:brightness(1)}
+  50%{opacity:1;filter:brightness(1.16)}
+}
+@media (prefers-reduced-motion:no-preference){
+  .paper .ornament-symbol,
+  .paper .end-ornament,
+  .paper .emoji-frame .frame-side,
+  .paper .tiptap img,
+  .paper .letter-content img,
+  .paper .free-sticker.free-visual>.emletter-visual-copy:not(.ornament-line){
+    animation:emletter-soft-wind 3.8s ease-in-out infinite;
+    transform-origin:50% 85%;
+  }
+  .paper .ornament-symbol,.paper .end-ornament{animation-duration:4.4s}
+  .paper .frame-left,.paper .frame-bottom,.paper .free-sticker.free-visual>.emletter-visual-copy{animation-delay:-1.7s}
+  .paper .frame-right,.paper .tiptap img,.paper .letter-content img{animation-delay:-.8s}
+  .paper .letter-signature[data-signature-style="digital"]{animation:emletter-soft-bob 4s ease-in-out infinite}
+  .paper .ornament-line{animation:emletter-soft-glimmer 3.6s ease-in-out infinite}
+  .paper .ornament-line:last-of-type{animation-delay:-1.5s}
+  /* Mantener quieto el elemento sobre el que se está trabajando. */
+  #edit-paper .free-sticker:focus-within>.emletter-visual-copy,
+  #edit-paper .free-moving,
+  #edit-paper .free-moving .emletter-visual-copy{animation:none!important;translate:none;rotate:none}
+}
+/* Los fotogramas se controlan en JavaScript, no por el reloj del navegador:
+   evita saltos y GIFs donde todos los fotogramas son idénticos. */
+.export-stage.export-animated *,
+.export-stage.export-animated .paper{animation:none!important;transition:none!important;translate:none!important;rotate:none!important}
+@media (prefers-reduced-motion:reduce){
+  .paper .ornament-symbol,.paper .end-ornament,.paper .emoji-frame .frame-side,
+  .paper .tiptap img,.paper .letter-content img,.paper .ornament-line,
+  .paper .free-sticker.free-visual>.emletter-visual-copy,
+  .paper .letter-signature[data-signature-style="digital"]{animation:none!important;translate:none!important;rotate:none!important}
+}
 @media(max-width:430px){.share-actions{width:100%;display:grid;grid-template-columns:1fr}.share-actions .primary,.share-actions .outline{width:100%}}
 
 /* Keep the editor and sharing controls alongside the designer while scrolling. */
