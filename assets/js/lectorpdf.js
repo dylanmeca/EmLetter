@@ -29,6 +29,7 @@
     brightness: $("pdf-brightness"), brightnessValue: $("pdf-brightness-value"),
     blueLight: $("pdf-blue-light"), blueLightValue: $("pdf-blue-light-value"),
     temperatureMatrix: $("pdf-reader-temperature-matrix"),
+    luminanceChannels: [$("pdf-reader-luminance-r"), $("pdf-reader-luminance-g"), $("pdf-reader-luminance-b")],
     card: document.querySelector(".pdf-reader-card"),
     fullscreen: $("pdf-fullscreen-toggle"), fullscreenLabel: $("pdf-fullscreen-label"),
     fullscreenIcon: $("pdf-fullscreen-icon"),
@@ -93,12 +94,26 @@
       `0 0 ${blueGain.toFixed(5)} 0 0`,
       "0 0 0 1 0",
     ].join(" "));
-    // El filtro SVG opera en RGB lineal: la atenuación se aplica sobre la
-    // intensidad del canal, no mediante transparencia ni mezcla naranja.
-    // Al 0% no se procesa la hoja con el filtro SVG.
-    elements.sheet.style.filter = settings.blueLight
-      ? `url("#pdf-reader-temperature-filter") brightness(${settings.brightness / 100})`
-      : `brightness(${settings.brightness / 100})`;
+    // Modificar la luminancia real de los píxeles del canvas en RGB lineal.
+    // Al oscurecer se reduce la luminancia de toda la página, incluso del blanco.
+    // Al iluminar se realzan sombras y tonos medios con gamma (un blanco puro ya
+    // está en el máximo de la pantalla y no puede aclararse más desde una web).
+    // Las barras de censura están fuera del canvas y conservan su negro absoluto.
+    const level = settings.brightness;
+    let amplitude = 1, exponent = 1, offset = 0;
+    if (level < 100) {
+      amplitude = level / 100;
+    } else if (level > 100) {
+      const strength = (level - 100) / 50;
+      exponent = 1 - .38 * strength;
+      offset = .012 * strength;
+      amplitude = 1 - offset;
+    }
+    for (const channel of elements.luminanceChannels) {
+      channel.setAttribute("amplitude", amplitude.toFixed(5));
+      channel.setAttribute("exponent", exponent.toFixed(5));
+      channel.setAttribute("offset", offset.toFixed(5));
+    }
     elements.brightnessValue.textContent = `${settings.brightness}%`;
     elements.blueLightValue.textContent = `${settings.blueLight}% · ${kelvin} K`;
     elements.brightness.setAttribute("aria-valuetext", `${settings.brightness}%`);
@@ -639,7 +654,7 @@
       await Promise.allSettled([renderText(page, viewport, renderToken), renderLinks(page, viewport, renderToken)]);
       if (renderToken !== state.revision || state.pdf !== currentPdf) return;
       paintOcrText();
-      setStatus(state.redactionMode ? "Lápiz activo: pulsa una palabra o arrastra para cubrir un área" : `Página ${state.page} de ${state.total}`);
+      setStatus(`Página ${state.page} de ${state.total}`);
       requestAnimationFrame(() => {
         if (renderToken !== state.revision) return;
         if (preserveCenter) {
@@ -774,8 +789,7 @@
     elements.redactDownload.hidden = !state.redactionMode;
     if (state.pdf && elements.canvas.width) applyTheme();
     paintRedactions();
-    if (state.redactionMode) setStatus("Lápiz activo: pulsa una palabra o arrastra para cubrir un área");
-    else if (state.pdf) setStatus(`Página ${state.page} de ${state.total}`);
+    if (state.pdf) setStatus(`Página ${state.page} de ${state.total}`);
     updateUI();
   }
 
@@ -831,7 +845,6 @@
     state.redactionBoxes.set(state.page, boxes);
     paintRedactions();
     updateUI();
-    setStatus(`${boxes.length} ${boxes.length === 1 ? "censura" : "censuras"} en la página ${state.page}. Descarga el PDF para aplicar las censuras definitivamente.`);
   }
 
   // PDF.js divide el texto en fragmentos: Range permite encontrar la PALABRA bajo
@@ -901,7 +914,6 @@
     } else {
       const word = wordUnderPointer(event.clientX, event.clientY);
       if (word) appendRedaction([word]);
-      else setStatus("No se detectó una palabra en esa zona. Arrastra el lápiz para cubrirla igualmente.");
     }
   });
   elements.redactions.addEventListener("pointercancel", () => {
@@ -972,7 +984,7 @@
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-      setStatus("PDF censurado descargado. El documento exportado está aplanado en imágenes.");
+      setStatus(`Página ${state.page} de ${state.total}`);
     } catch (error) {
       console.error("EmLetter: error al exportar PDF censurado:", error);
       showError("No se pudo descargar el PDF censurado. Comprueba tu conexión y la memoria disponible.");
