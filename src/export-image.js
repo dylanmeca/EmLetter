@@ -379,7 +379,11 @@
     const renderer=await loadRenderer();
     // Reproducir el tamaño que realmente ve el usuario: en móvil el ancho
     // configurado para escritorio no equivale al lienzo visible.
-    const paperWidth=Math.max(1,sourcePaper.getBoundingClientRect().width);
+    const artMode=sourcePaper.dataset.artActive==='true';
+    const desiredWidth=parseFloat(getComputedStyle(sourcePaper).getPropertyValue('--paper-width'));
+    const paperWidth=artMode && Number.isFinite(desiredWidth)
+      ? Math.max(320,Math.min(1400,desiredWidth))
+      : Math.max(1,sourcePaper.getBoundingClientRect().width);
     const wrapper=getComputedStyle(sourcePaper.parentElement);
     const pageSpace=Math.max(0,parseFloat(wrapper.paddingLeft)||0);
     // Reserva espacio para que el halo exterior no se recorte en el PNG.
@@ -432,6 +436,14 @@
     try{
       if(document.fonts?.ready)await document.fonts.ready;
       inlineComputedStyles(stage);
+      // Al preparar el PNG, html2canvas puede resolver `font` como abreviatura
+      // y perder el tamaño particular del número luminoso. Lo fijamos luego
+      // de integrar estilos para conservar el diseño incluso desde móvil.
+      if(artMode){
+        const artNumber=paper.querySelector('.emletter-art-number');
+        const selectedSize=parseFloat(sourcePaper.style.getPropertyValue('--art-number-size'));
+        if(artNumber&&Number.isFinite(selectedSize))artNumber.style.setProperty('font-size',Math.max(60,Math.min(360,selectedSize))+'px','important');
+      }
       if(document.body.dataset.frameMode==='neon')makeNeonFrameExportSafe(stage);
       normalizeUnsupportedColorFunctions(stage);
       await embedImages(stage);
