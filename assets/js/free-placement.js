@@ -185,9 +185,13 @@
       if(free)maxBottom=Math.max(maxBottom,Math.max(0,y)+Math.max(45,n.getBoundingClientRect().height));
       const nth=[...root.children].indexOf(n)+1;
       if(nth<1)continue;
-      const base=free?`position:absolute!important;left:${clamp(x)}px!important;top:${clamp(y)}px!important;transform:none!important;z-index:${moving?12:7};max-width:100%;width:max-content;min-width:min(35px,100%);box-sizing:border-box;margin:0!important;`:
+      // Las imágenes liberadas conservan el porcentaje elegido en el cuadro
+      // Insertar imagen. width:max-content las agrandaba indebidamente.
+      const imageWidth=n.tagName==='IMG'?Math.max(10,Math.min(100,parseFloat(n.style.width)||100)):null;
+      const freeWidth=imageWidth!==null?`width:${imageWidth}%!important;min-width:0!important;`:'width:max-content;min-width:min(35px,100%);';
+      const base=free?`position:absolute!important;left:${clamp(x)}px!important;top:${clamp(y)}px!important;transform:none!important;z-index:${moving?12:7};max-width:100%;${freeWidth}box-sizing:border-box;margin:0!important;`:
         `position:relative;transform:translate(${clamp(x)}px,${clamp(y)}px)!important;`;
-      rules.push(`#edit-paper #editor .tiptap > :nth-child(${nth}){${base}${moving?'outline:1px dashed #a6b6e9;outline-offset:5px;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66);':''}}`);
+      rules.push(`#edit-paper #editor .tiptap > :nth-child(${nth}){${base}${moving?'outline:1px dashed #a6b6e9;outline-offset:5px;pointer-events:auto;filter:drop-shadow(0 0 7px #8390bf66);':''}}`);
     }
     sheet.textContent=rules.join('\n');
     root.style.minHeight=maxBottom?Math.min(3000,Math.max(295,maxBottom+32))+'px':'';
@@ -200,7 +204,8 @@
       const n=nodes[i],b=findBlock(n,used,readingPaper);
       if(!isFloating(b))continue;
       const nth=[...parent.children].indexOf(n)+1;if(nth<1)continue;
-      rules.push(`#read-paper #read-content > :nth-child(${nth}){position:absolute!important;left:${clamp(b.x)}px!important;top:${clamp(b.y)}px!important;transform:none!important;max-width:100%;width:max-content;min-width:35px;margin:0!important;}`);
+      const width=n.tagName==='IMG'?`width:${Math.max(10,Math.min(100,parseFloat(n.style.width)||100))}%!important;min-width:0!important;`:'width:max-content;min-width:35px;';
+      rules.push(`#read-paper #read-content > :nth-child(${nth}){position:absolute!important;left:${clamp(b.x)}px!important;top:${clamp(b.y)}px!important;transform:none!important;max-width:100%;${width}margin:0!important;}`);
       maxBottom=Math.max(maxBottom,Math.max(0,b.y)+Math.max(48,n.getBoundingClientRect().height));
     }
     readerSheet.textContent=rules.join('\n');
@@ -375,7 +380,12 @@
     const art=node.closest('[data-art-item]');
     if(art&&artKeys.has(art.dataset.artItem)&&!art.hidden&&editingPaper.dataset.artActive==='true')
       return {kind:'art',key:art.dataset.artItem,element:art};
-    const decor=node.closest('.ornament-symbol,.ornament-line,.end-ornament,.letter-signature,.frame-side,.ornament-top');
+    // El ornamento de cabecera se mueve como una unidad. Sus líneas y
+    // símbolo continúan perteneciendo al mismo conjunto, incluso tras soltarlo.
+    const top=node.closest('.ornament-top');
+    if(top && editingPaper.querySelector('.ornament-top')===top)
+      return {kind:'decor',key:'ornament',element:top};
+    const decor=node.closest('.end-ornament,.letter-signature,.frame-side');
     if(decor){
       for(const [key,selector]of Object.entries(decorations)){
         if(editingPaper.querySelector(selector)===decor)return {kind:'decor',key,element:decor};
@@ -580,6 +590,9 @@
     if(item?.kind==='sticker'||item?.kind==='decor'||item?.kind==='art'){
       ev.preventDefault();begin(item,ev);return;
     }
+    if(item?.kind==='block'&&item.element.tagName==='IMG'){
+      ev.preventDefault();begin({...item,convert:true},ev);return;
+    }
     const block=source.closest('#editor .tiptap p,#editor .tiptap h1,#editor .tiptap h2,#editor .tiptap h3');
     if(!block||!root?.contains(block))return;
     const ed=editor(),info=nodeAtElement(block);
@@ -599,7 +612,8 @@
       }
       return;
     }
-    // El bloque sigue siendo editable con todos sus estilos y fuentes.
+    // Incluye IMG: no pierde el nodo de Tiptap, ni su enlace al recurso,
+    // y se puede volver a activar tras cualquier cantidad de desplazamientos.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
   // El doble clic DERECHO activa o fija el elemento, sin abrir ningún menú.
