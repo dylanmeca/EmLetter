@@ -568,7 +568,12 @@
     stage.style.position='fixed';
     stage.style.left='-100000px';
     stage.style.top='0';
-    stage.style.width=`${Math.ceil(paperWidth+exportPadding*2)}px`;
+    // En una página ancha, conservar el margen libre que hace visible la
+    // posición elegida (izquierda, centro o derecha) también en la imagen.
+    const sourceWrap=sourcePaper.closest('.paper-wrap');
+    const sourceWrapWidth=sourceWrap?.getBoundingClientRect().width||0;
+    const stageWidth=Math.max(paperWidth+exportPadding*2,sourceWrapWidth);
+    stage.style.width=`${Math.ceil(stageWidth)}px`;
     stage.style.padding=`${exportPadding}px`;
     stage.style.pointerEvents='none';
     stage.style.zIndex='-1';
@@ -598,8 +603,13 @@
     cleanupClone(paper);
     paper.style.width='100%';
     paper.style.maxWidth=`${paperWidth}px`;
-    paper.style.marginLeft='auto';
-    paper.style.marginRight='auto';
+    // No centrar por defecto: estas variables reflejan el control
+    // «Posición de la carta» de los ajustes del editor.
+    const paperLayout=getComputedStyle(sourcePaper);
+    const configuredLeft=paperLayout.getPropertyValue('--paper-left').trim();
+    const configuredRight=paperLayout.getPropertyValue('--paper-right').trim();
+    paper.style.marginLeft=configuredLeft||'auto';
+    paper.style.marginRight=configuredRight||'auto';
     stage.append(paper);
     document.body.append(stage);
 
