@@ -11,16 +11,39 @@
   // (Safari puede reajustar el zoom cuando cambia el ancho desplazable).
   function clampToPaper(item,x,y){
     const nx=clamp(x),ny=clamp(y);
-    if(!window.matchMedia('(max-width:760px)').matches||!item?.element)return {x:nx,y:ny};
+    if(!item?.element)return {x:nx,y:ny};
+    const mobile=window.matchMedia('(max-width:760px)').matches;
+    const isDecoration=item.kind==='art'||item.kind==='decor';
+    if(!mobile&&!isDecoration)return {x:nx,y:ny};
     const paper=editingPaper;
     const w=paper.clientWidth;
-    const width=Math.max(1,Math.min(w,item.element.getBoundingClientRect().width||40));
+    const rect=item.element.getBoundingClientRect();
+    const width=Math.max(1,Math.min(w,rect.width||40));
     if(item.kind==='sticker')return {x:Math.max(0,Math.min(nx,w-width-4)),y:ny};
     if(item.kind==='block'){
       const contentWidth=root?.clientWidth||w;
       return {x:Math.max(0,Math.min(nx,contentWidth-width)),y:ny};
     }
-    return {x:Math.max(-w/2,Math.min(nx,w/2)),y:ny};
+    // Conservar al menos parte del elemento dentro del papel. Si una estrella
+    // o filigrana salía del área visible del editor, después no podía volver
+    // a seleccionarse. Funciona en escritorio y móvil, sin forzar un origen
+    // único para decoraciones situadas en esquinas o en porcentajes.
+    const paperRect=paper.getBoundingClientRect();
+    const currentX=active?.element===item.element?active.x:(positionFor(item)?.x||0);
+    const currentY=active?.element===item.element?active.y:(positionFor(item)?.y||0);
+    const originalLeft=rect.left-paperRect.left-currentX;
+    const originalTop=rect.top-paperRect.top-currentY;
+    const visible=Math.min(16,Math.max(7,width*.35));
+    const minX=visible-width-originalLeft;
+    const maxX=w-visible-originalLeft;
+    const height=Math.max(1,rect.height||22);
+    const paperHeight=paper.clientHeight;
+    const minY=visible-height-originalTop;
+    const maxY=paperHeight-visible-originalTop;
+    return {
+      x:clamp(Math.max(minX,Math.min(nx,Math.max(minX,maxX)))),
+      y:clamp(Math.max(minY,Math.min(ny,Math.max(minY,maxY))))
+    };
   }
   const zero=()=>({blocks:[],decor:{},stickers:[]});
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
