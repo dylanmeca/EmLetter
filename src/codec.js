@@ -10,6 +10,20 @@ if(input.artEnabled===true && input.artNumberVisible===undefined)s.artNumberVisi
 // Older cards stored only the theme name, not their custom paper colors.
 if(input.atmosphereName===undefined)s.atmosphereName=({velvet:'Tinta',nocturne:'Bruma',relic:'Ceniza'})[s.theme];if(input.paperBg===undefined)s.paperBg=palettes[s.theme][0];if(input.textColor===undefined)s.textColor=palettes[s.theme][1];if(input.titleColor===undefined)s.titleColor=s.textColor;if(input.signatureStyle===undefined)s.signatureStyle=input.signature===false?'none':'name';s.signature=s.signatureStyle!=='none';return s}
 
+// Solo propiedades tipográficas seguras; nada de CSS libre en enlaces.
+function cleanCelebrationStyle(value){
+ const result={};if(!value||typeof value!=='object')return result;
+ if(typeof value.fontFamily==='string'&&/^[\w\s,'"-]{1,140}$/.test(value.fontFamily))result.fontFamily=value.fontFamily;
+ if(Number.isFinite(Number(value.fontSize))&&Number(value.fontSize)>=8&&Number(value.fontSize)<=360)result.fontSize=Math.round(Number(value.fontSize));
+ if(/^(normal|bold|[1-9]00)$/.test(String(value.fontWeight)))result.fontWeight=String(value.fontWeight);
+ if(/^(normal|italic|oblique)$/.test(String(value.fontStyle)))result.fontStyle=value.fontStyle;
+ if(/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i.test(String(value.color)))result.color=value.color;
+ if(['left','center','right','justify'].includes(value.textAlign))result.textAlign=value.textAlign;
+ if(/^#[0-9a-f]{6}$/i.test(String(value.backgroundColor)))result.backgroundColor=value.backgroundColor;
+ if(['underline','line-through','none'].includes(value.textDecoration))result.textDecoration=value.textDecoration;
+ return result;
+}
+
 // Las coordenadas se validan antes de compartirlas o dibujarlas.
 export function cleanPlacement(value){
  const data={blocks:[],decor:{},stickers:[]};
@@ -18,10 +32,17 @@ export function cleanPlacement(value){
   if(!b||!Number.isInteger(b.i)||b.i<0||b.i>1000||!Number.isFinite(b.x)||!Number.isFinite(b.y))continue;
   data.blocks.push({i:b.i,s:typeof b.s==='string'?b.s.slice(0,124):'',x:Math.max(-1600,Math.min(1600,Math.round(b.x))),y:Math.max(-1600,Math.min(1600,Math.round(b.y)))});
  }
- const allowed=['ornament','central','lineLeft','lineRight','final','signature','frameTop','frameRight','frameBottom','frameLeft'];
+ const allowed=['ornament','central','lineLeft','lineRight','final','signature','frameTop','frameRight','frameBottom','frameLeft','artNumber','artCandles',...['TL','TR','BL','BR'].map(c=>'artCorner'+c),...Array.from({length:36},(_,i)=>'artStar'+i),...Array.from({length:6},(_,i)=>'artGlint'+i)];
  if(value.decor&&typeof value.decor==='object')for(const key of allowed){
   const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
-  if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))data.decor[key]={x:Math.max(-1600,Math.min(1600,Math.round(point.x))),y:Math.max(-1600,Math.min(1600,Math.round(point.y)))};
+  if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y)){
+   const position={x:Math.max(-1600,Math.min(1600,Math.round(point.x))),y:Math.max(-1600,Math.min(1600,Math.round(point.y)))};
+   if(key.startsWith('art')){
+    const style=cleanCelebrationStyle(point.style);
+    if(Object.keys(style).length)position.style=style;
+   }
+   data.decor[key]=position;
+  }
  }
  if(Array.isArray(value.stickers))for(const s of value.stickers.slice(0,80)){
   if(!s||typeof s.text!=='string'||!Number.isFinite(s.x)||!Number.isFinite(s.y))continue;

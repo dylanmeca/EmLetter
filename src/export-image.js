@@ -611,8 +611,27 @@
       // de integrar estilos para conservar el diseño incluso desde móvil.
       if(artMode){
         const artNumber=paper.querySelector('.emletter-art-number');
-        const selectedSize=parseFloat(sourcePaper.style.getPropertyValue('--art-number-size'));
-        if(artNumber&&Number.isFinite(selectedSize))artNumber.style.setProperty('font-size',Math.max(60,Math.min(360,selectedSize))+'px','important');
+        const sourceNumber=sourcePaper.querySelector('.emletter-art-number');
+        const manuallyFormatted=Boolean(sourceNumber?.style.fontSize);
+        const selectedSize=manuallyFormatted
+          ? parseFloat(getComputedStyle(sourceNumber).fontSize)
+          : parseFloat(sourcePaper.style.getPropertyValue('--art-number-size'));
+        if(artNumber&&Number.isFinite(selectedSize))
+          artNumber.style.setProperty('font-size',Math.max(8,Math.min(360,selectedSize))+'px','important');
+      }
+      // Los tamaños elegidos desde la barra pueden superar las reglas
+      // responsive del modo exportación (que prioriza el número y las esquinas).
+      // Restaurar los tamaños personalizados SIN ampliar los predeterminados.
+      if(artMode){
+        const originalItems=[...sourcePaper.querySelectorAll('[data-art-item]')];
+        const exportedItems=[...paper.querySelectorAll('[data-art-item]')];
+        originalItems.forEach((sourceItem,index)=>{
+          if(!sourceItem.style.fontSize)return;
+          const target=exportedItems[index];
+          const size=parseFloat(getComputedStyle(sourceItem).fontSize);
+          if(target&&Number.isFinite(size)&&size>=8&&size<=360)
+            target.style.setProperty('font-size',`${size}px`,'important');
+        });
       }
       if(document.body.dataset.frameMode==='neon')makeNeonFrameExportSafe(stage);
       normalizeUnsupportedColorFunctions(stage);
