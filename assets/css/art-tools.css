@@ -9,18 +9,59 @@
 .paper[data-art-active="false"] .emletter-art-header,
 .paper[data-art-active="false"] .emletter-art-footer{display:none!important}
 .paper[data-art-active="true"]{isolation:isolate}
-.paper[data-art-active="true"] .emletter-art-frame{display:block;position:absolute;inset:var(--art-frame-inset,18px);z-index:0;pointer-events:none;color:var(--art-glow);border:1px solid var(--art-glow);box-shadow:inset 0 0 var(--art-glow-strength) var(--art-glow),0 0 var(--art-glow-strength) var(--art-glow)}
+/* Las filigranas son adornos de esquinas, no un segundo marco. La línea,
+   el grosor y el tipo de marco siguen controlándose en «El papel y su marco». */
+.paper[data-art-active="true"] .emletter-art-frame{
+  position:absolute;
+  inset:var(--art-frame-inset,18px);
+  z-index:1;
+  display:block;
+  pointer-events:none;
+  color:var(--art-glow);
+  border:0;
+  box-shadow:none;
+  background:none;
+}
 .paper[data-art-active="true"]:not(.art-framed) .emletter-art-frame{display:none}
-.emletter-art-edge{position:absolute;pointer-events:none;background:linear-gradient(90deg,transparent,currentColor,transparent);box-shadow:0 0 9px var(--art-glow)}
-.emletter-art-edge.edge-top,.emletter-art-edge.edge-bottom{height:1px;left:12%;right:12%}
-.emletter-art-edge.edge-top{top:0}.emletter-art-edge.edge-bottom{bottom:0}
-.emletter-art-edge.edge-right,.emletter-art-edge.edge-left{width:1px;top:12%;bottom:12%;background:linear-gradient(180deg,transparent,currentColor,transparent)}
-.emletter-art-edge.edge-right{right:0}.emletter-art-edge.edge-left{left:0}
-.emletter-art-corner{position:absolute;color:var(--art-glow);font-family:Georgia,serif;font-size:var(--art-corner-size);line-height:1;text-shadow:0 0 3px #fff,0 0 var(--art-glow-strength) var(--art-glow)}
-.emletter-art-corner.corner-tl{top:-17px;left:-12px}
-.emletter-art-corner.corner-tr{top:-17px;right:-12px;transform:scaleX(-1)}
-.emletter-art-corner.corner-bl{bottom:-17px;left:-12px;transform:scaleY(-1)}
-.emletter-art-corner.corner-br{bottom:-17px;right:-12px;transform:scale(-1)}
+.emletter-art-corner{
+  position:absolute;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:calc(var(--art-corner-size) * 1.75);
+  height:calc(var(--art-corner-size) * 1.75);
+  font-family:Georgia,serif;
+  font-size:var(--art-corner-size);
+  line-height:1;
+  color:var(--art-glow);
+  text-shadow:0 0 3px #fff,0 0 var(--art-glow-strength) var(--art-glow);
+  filter:drop-shadow(0 0 5px var(--art-glow));
+}
+/* Pequeños trazos curvos que decoran las esquinas sin unirlas mediante bordes. */
+.emletter-art-corner::before{
+  content:"";
+  position:absolute;
+  inset:8% 6% 6% 8%;
+  border-top:1px solid currentColor;
+  border-left:1px solid currentColor;
+  border-radius:90% 0 0 0;
+  opacity:.75;
+}
+.emletter-art-corner::after{
+  content:"";
+  position:absolute;
+  top:20%;
+  right:-8%;
+  width:46%;
+  height:1px;
+  background:linear-gradient(90deg,currentColor,transparent);
+  transform:rotate(21deg);
+  opacity:.7;
+}
+.emletter-art-corner.corner-tl{top:0;left:0;transform:translate(-15%,-15%)}
+.emletter-art-corner.corner-tr{top:0;right:0;transform:translate(15%,-15%) scaleX(-1)}
+.emletter-art-corner.corner-bl{bottom:0;left:0;transform:translate(-15%,15%) scaleY(-1)}
+.emletter-art-corner.corner-br{bottom:0;right:0;transform:translate(15%,15%) scale(-1)}
 .emletter-art-sparkles{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
 .emletter-art-star{position:absolute;color:var(--art-glow);text-shadow:0 0 5px #fff,0 0 var(--art-glow-strength) var(--art-glow);line-height:1}
 .emletter-art-star[hidden],.emletter-art-header[hidden],.emletter-art-footer[hidden],.emletter-art-candles[hidden]{display:none!important}
@@ -42,7 +83,7 @@
 @media(max-width:760px){
   .emletter-art-header{min-height:calc(min(var(--art-number-size),32vw) * 1.25)}
   .emletter-art-candles{width:55%;height:42px;top:-9px;transform:translateX(-50%) scale(.65);transform-origin:center bottom}
-  .emletter-art-corner{font-size:min(var(--art-corner-size),12vw)}
+  .emletter-art-corner{font-size:min(var(--art-corner-size),12vw);width:min(calc(var(--art-corner-size) * 1.75),21vw);height:min(calc(var(--art-corner-size) * 1.75),21vw)}
   .paper[data-art-active="true"] .emletter-art-number{font-size:min(var(--art-number-size),32vw)}
   .emletter-art-crown{font-size:min(var(--art-crown-size),18vw)}
 }
