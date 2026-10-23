@@ -46,6 +46,17 @@
     frameTop:'.frame-top',frameRight:'.frame-right',
     frameBottom:'.frame-bottom',frameLeft:'.frame-left'
   };
+  // Las piezas de Celebración comparten el sistema de coordenadas y el
+  // guardado de enlaces con los adornos y bloques existentes.
+  const artDecorations={
+    artNumber:'.emletter-art-number[data-art-item="artNumber"]',
+    artCandles:'.emletter-art-candles[data-art-item="artCandles"]',
+  };
+  for(const corner of ['TL','TR','BL','BR'])artDecorations[`artCorner${corner}`]=`[data-art-item="artCorner${corner}"]`;
+  for(let i=0;i<36;i++)artDecorations[`artStar${i}`]=`[data-art-item="artStar${i}"]`;
+  for(let i=0;i<6;i++)artDecorations[`artGlint${i}`]=`[data-art-item="artGlint${i}"]`;
+  const artKeys=new Set(Object.keys(artDecorations));
+  Object.assign(decorations,artDecorations);
   const dKeys=Object.keys(decorations);
   const emptyBlock=n=>['H1','H2','H3','P'].includes(n.tagName)&&!n.textContent.trim()&&!n.querySelector('img,table,hr');
   const eligible=n=>['P','H1','H2','H3','IMG','BLOCKQUOTE','UL','OL','PRE','TABLE','HR'].includes(n.tagName);
@@ -91,6 +102,27 @@
       if(val)visual.style.setProperty(prop.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),prop==='fontSize'?val+'px':val,'important');
     }}
   }
+  function cleanArtStyle(value){
+    const style=cleanTextStyle(value);
+    if(Number.isFinite(Number(value?.fontSize))&&Number(value.fontSize)>=8&&Number(value.fontSize)<=360)
+      style.fontSize=Math.round(Number(value.fontSize));
+    return style;
+  }
+  function applyArtStyle(el,style){
+    if(!el)return;
+    for(const [property,value] of Object.entries({
+      fontFamily:style?.fontFamily||'',fontSize:style?.fontSize?style.fontSize+'px':el.dataset.artBaseFontSize||'',
+      fontWeight:style?.fontWeight||'',fontStyle:style?.fontStyle||'',
+      color:style?.color||'',textAlign:style?.textAlign||'',
+      backgroundColor:style?.backgroundColor||'',textDecoration:style?.textDecoration||''
+    }))el.style[property]=value;
+  }
+  function artPoint(point){
+    const a={x:clamp(point.x),y:clamp(point.y)};
+    const style=cleanArtStyle(point.style);
+    if(Object.keys(style).length)a.style=style;
+    return a;
+  }
   function normalize(value){
     const clean=zero();
     if(!value||typeof value!=='object')return clean;
@@ -103,7 +135,7 @@
     if(value.decor&&typeof value.decor==='object'){
       for(const key of dKeys){
         const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
-        if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))clean.decor[key]={x:clamp(point.x),y:clamp(point.y)};
+        if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))clean.decor[key]=artKeys.has(key)?artPoint(point):{x:clamp(point.x),y:clamp(point.y)};
       }
     }
     if(Array.isArray(value.stickers))for(const sticker of value.stickers.slice(0,80)){
@@ -154,6 +186,12 @@
   function transform(n,x,y){
     if(root?.contains(n)){paintBlocks();return}
     if(n.classList.contains('free-sticker')){n.style.left=clamp(x)+'px';n.style.top=clamp(y)+'px';return}
+    if(n.hasAttribute('data-art-item')){
+      // 'translate' es independiente de 'transform': conserva las esquinas
+      // espejadas y el centrado horizontal de las velas.
+      n.style.translate=x||y?`${clamp(x)}px ${clamp(y)}px`:'';
+      n.classList.toggle('free-placed',Boolean(x||y));return;
+    }
     n.style.transform=x||y?`translate(${clamp(x)}px, ${clamp(y)}px)`:'';
     n.classList.toggle('free-placed',Boolean(x||y));
   }
@@ -179,6 +217,7 @@
       if(!el)continue;
       const point=layout.decor[key];
       if(!active||el!==active.element)transform(el,point?.x||0,point?.y||0);
+      if(artKeys.has(key))applyArtStyle(el,point?.style);
     }
   }
   function changed(){
@@ -285,6 +324,12 @@
   function persist(item,x,y){
     const a=clamp(x),b=clamp(y);
     if(item.kind==='sticker'){const sticker=layout.stickers.find(s=>s.id===item.key);if(sticker){sticker.x=a;sticker.y=b}}
+    else if(item.kind==='art'){
+      const prev=layout.decor[item.key];
+      const style=cleanArtStyle(prev?.style);
+      if(!a&&!b&&!Object.keys(style).length)delete layout.decor[item.key];
+      else layout.decor[item.key]={x:a,y:b,...(Object.keys(style).length?{style}:{})};
+    }
     else if(item.kind==='decor'){
       if(!a&&!b)delete layout.decor[item.key];
       else layout.decor[item.key]={x:a,y:b};
@@ -304,6 +349,9 @@
     if(!(node instanceof Element)||!editingPaper.contains(node))return null;
     const sticker=node.closest('.free-sticker');
     if(sticker)return {kind:'sticker',key:sticker.dataset.stickerId,element:sticker};
+    const art=node.closest('[data-art-item]');
+    if(art&&artKeys.has(art.dataset.artItem)&&!art.hidden&&editingPaper.dataset.artActive==='true')
+      return {kind:'art',key:art.dataset.artItem,element:art};
     const decor=node.closest('.ornament-symbol,.ornament-line,.end-ornament,.letter-signature,.frame-side,.ornament-top');
     if(decor){
       for(const [key,selector]of Object.entries(decorations)){
@@ -316,7 +364,7 @@
   }
   function positionFor(item){
     if(item.kind==='sticker')return layout.stickers.find(s=>s.id===item.key)||{x:0,y:0};
-    if(item.kind==='decor')return layout.decor[item.key]||{x:0,y:0};
+    if(item.kind==='decor'||item.kind==='art')return layout.decor[item.key]||{x:0,y:0};
     const list=children(editingPaper),i=list.indexOf(item.element),s=signature(item.element);
     return findBlock(item.element)||{x:0,y:0};
   }
@@ -340,7 +388,9 @@
       p={i,s:nextSignature(item.element,true),x,y};layout.blocks.push(p);
       changed();
     }
-    selectedFree=item.kind==='block'&&free?{kind:'block',element:item.element}:item.kind==='sticker'?{kind:'sticker',key:item.key}:null;
+    selectedFree=item.kind==='block'&&free?{kind:'block',element:item.element}:
+      item.kind==='sticker'?{kind:'sticker',key:item.key}:
+      item.kind==='art'?{kind:'art',key:item.key}:null;
     active={...item,free,index:item.kind==='block'?children(editingPaper).indexOf(item.element):-1,sig:item.kind==='block'?signature(item.element):'',x:p.x,y:p.y,startX:ev.clientX,startY:ev.clientY,originX:p.x,originY:p.y};
     document.body.classList.add('placing-element');
     if(item.kind==='block')paintBlocks();else item.element.classList.add('free-moving');
@@ -401,6 +451,33 @@
     if(selectedFree?.kind!=='sticker')return null;
     return layout.stickers.find(st=>st.id===selectedFree.key)||null;
   }
+  function selectedArt(){
+    if(selectedFree?.kind!=='art')return null;
+    const key=selectedFree.key;
+    const element=editingPaper.querySelector(artDecorations[key]);
+    return element?{key,element,point:layout.decor[key]||{x:0,y:0}}:null;
+  }
+  function applyArtFormat(target){
+    const art=selectedArt();if(!art||!target)return false;
+    const id=target.id,cmd=target.dataset.command;
+    const style=cleanArtStyle(art.point.style);
+    if(id==='selection-font')style.fontFamily=target.value;
+    else if(id==='selection-size')style.fontSize=Math.max(8,Math.min(360,Number(target.value)||18));
+    else if(id==='text-color')style.color=target.value;
+    else if(id==='text-align')style.textAlign=target.value;
+    else if(id==='highlight-color')style.backgroundColor=target.value;
+    else if(cmd==='bold')style.fontWeight=/^(bold|[6-9]00)$/.test(style.fontWeight)?'normal':'bold';
+    else if(cmd==='italic')style.fontStyle=style.fontStyle==='italic'?'normal':'italic';
+    else if(cmd==='underline')style.textDecoration=style.textDecoration==='underline'?'none':'underline';
+    else if(cmd==='strike')style.textDecoration=style.textDecoration==='line-through'?'none':'line-through';
+    else if(id==='clear-format')for(const name of Object.keys(style))delete style[name];
+    else return false;
+    // Se almacena en el mismo layout que las posiciones: así viaja por el enlace.
+    const cleaned=cleanArtStyle(style);
+    layout.decor[art.key]={x:art.point.x,y:art.point.y,...(Object.keys(cleaned).length?{style:cleaned}:{})};
+    applyArtStyle(art.element,cleaned);
+    changed();return true;
+  }
   function applyStickerFormat(target){
     const st=selectedSticker();if(!st||!target)return false;
     const id=target.id,cmd=target.dataset.command;
@@ -417,21 +494,31 @@
     else return false;
     renderStickers(editingPaper);changed();return true;
   }
-  if(toolbar){
-    toolbar.addEventListener('click',ev=>{
-      const button=ev.target.closest('button');
-      if(!button||!selectedSticker())return;
-      if(applyStickerFormat(button)){ev.stopImmediatePropagation();ev.preventDefault()}
+  // En móvil, la barra se traslada físicamente al panel inferior. Escuchar
+  // desde document permite utilizar los mismos controles sin duplicarlos.
+  // La captura se detiene ANTES del manejador Tiptap para no cambiar el texto
+  // de la carta cuando el usuario tiene seleccionado un adorno.
+  for(const eventName of ['click','change']){
+    document.addEventListener(eventName,ev=>{
+      if(!selectedSticker()&&!selectedArt())return;
+      const target=eventName==='click'?ev.target.closest?.('button'):ev.target;
+      if(!target)return;
+      const inTools=toolbar?.contains(target)||uiMobileTextControls(target);
+      if(!inTools)return;
+      const handled=selectedArt()?applyArtFormat(target):applyStickerFormat(target);
+      if(handled){ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation()}
     },true);
-    toolbar.addEventListener('change',ev=>{
-      if(!selectedSticker())return;
-      if(applyStickerFormat(ev.target)){ev.stopImmediatePropagation();ev.preventDefault()}
-    },true);
+  }
+  function uiMobileTextControls(target){
+    return Boolean(target?.closest?.('.mobile-sheet')&&target.matches?.(
+      '#selection-font,#selection-size,#text-color,#text-align,#highlight-color,#clear-format,[data-command]'
+    ));
   }
   // Cambiar entre un elemento libre y texto normal invalida el objetivo anterior.
   editingPaper.addEventListener('pointerdown',ev=>{
     const target=getTarget(ev.target);
     if(target?.kind==='sticker')selectedFree={kind:'sticker',key:target.key};
+    else if(target?.kind==='art')selectedFree={kind:'art',key:target.key};
     else if(target?.kind==='block')selectedFree=isFloating(positionFor(target))?{kind:'block',element:target.element}:null;
     else if(!active)selectedFree=null;
   });
@@ -467,7 +554,9 @@
     const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
     if(!source)return;
     const item=getTarget(source);
-    if(item?.kind==='sticker'||item?.kind==='decor'){ev.preventDefault();begin(item,ev);return}
+    if(item?.kind==='sticker'||item?.kind==='decor'||item?.kind==='art'){
+      ev.preventDefault();begin(item,ev);return;
+    }
     const block=source.closest('#editor .tiptap p,#editor .tiptap h1,#editor .tiptap h2,#editor .tiptap h3');
     if(!block||!root?.contains(block))return;
     const ed=editor(),info=nodeAtElement(block);
@@ -584,6 +673,10 @@
       if(frame)return;
       frame=requestAnimationFrame(()=>{frame=0;if(!active)apply(editingPaper)});
     });observer.observe(root,{childList:true,characterData:true,subtree:true})}
+    window.addEventListener('emletter:art-rendered',()=>{
+      if(active?.kind!=='art')apply(editingPaper);
+      apply(readingPaper);
+    });
     if(!readingPaper.closest('[hidden]')?.hidden&&window.emletterCurrentLayout)api.showReader(window.emletterCurrentLayout);
     else apply(editingPaper);
     window.addEventListener('hashchange',()=>{setTimeout(()=>{

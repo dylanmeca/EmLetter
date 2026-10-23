@@ -20,22 +20,22 @@
   function build(paper){
     if($('.emletter-art-frame',paper))return;
     const frame=el('div','emletter-art-frame');frame.setAttribute('aria-hidden','true');
-    for(const c of ['tl','tr','bl','br'])frame.append(el('span',`emletter-art-corner corner-${c}`,'❦'));
+    for(const c of ['tl','tr','bl','br']){const corner=el('span',`emletter-art-corner corner-${c}`,'❦');corner.dataset.artItem='artCorner'+c.toUpperCase();frame.append(corner)}
     const stars=el('div','emletter-art-sparkles');stars.setAttribute('aria-hidden','true');
     ART_POSITIONS.forEach(([x,y,size],i)=>{
       const star=el('span','emletter-art-star',i%4===0?'✦':i%3===0?'✧':'⋆');
-      star.dataset.mixedSymbol=star.textContent;
-      star.style.left=`${x}%`;star.style.top=`${y}%`;star.style.fontSize=`${size}px`;
+      star.dataset.mixedSymbol=star.textContent;star.dataset.artItem=`artStar${i}`;
+      star.style.left=`${x}%`;star.style.top=`${y}%`;star.style.fontSize=`${size}px`;star.dataset.artBaseFontSize=`${size}px`;
       stars.append(star);
     });
     const header=el('div','emletter-art-header');header.setAttribute('aria-label','Texto decorativo');
-    const number=el('span','emletter-art-number','15');
-    for(const [x,y,size] of [[29,38,13],[46,61,17],[63,32,11],[68,75,14],[41,79,10],[57,51,9]]){
-      const glint=el('span','emletter-art-number-glint','✦');
-      glint.style.left=x+'%';glint.style.top=y+'%';glint.style.fontSize=size+'px';
+    const number=el('span','emletter-art-number','15');number.dataset.artItem='artNumber';
+    for(const [index,[x,y,size]] of [[29,38,13],[46,61,17],[63,32,11],[68,75,14],[41,79,10],[57,51,9]].entries()){
+      const glint=el('span','emletter-art-number-glint','✦');glint.dataset.artItem=`artGlint${index}`;
+      glint.style.left=x+'%';glint.style.top=y+'%';glint.style.fontSize=size+'px';glint.dataset.artBaseFontSize=size+'px';
       header.append(glint);
     }
-    const candles=el('div','emletter-art-candles');candles.setAttribute('aria-hidden','true');
+    const candles=el('div','emletter-art-candles');candles.setAttribute('aria-hidden','true');candles.dataset.artItem='artCandles';
     header.append(candles,number);
     paper.insertBefore(frame,paper.firstChild);
     paper.insertBefore(stars,paper.firstChild);
@@ -92,6 +92,7 @@
       if(output)output.textContent=style[key]+(input.dataset.suffix||'');
     }
     window.dispatchEvent(new Event('emletter:art-colors-rendered'));
+    window.dispatchEvent(new Event('emletter:art-rendered'));
   }
   window.EmLetterArt={render};
   function init(){
