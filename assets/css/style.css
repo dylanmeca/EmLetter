@@ -353,6 +353,13 @@ body[data-ornament-line-style="none"] .ornament-line{display:none}
 }
 .emoji-frame{display:none;position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;color:var(--frame-color);text-shadow:0 0 var(--frame-glow-size) var(--frame-glow-color);font-size:var(--frame-emoji-size);line-height:1.15}
 body[data-frame-mode="emoji"] .emoji-frame{display:block}
+/* Glow follows each emoji's actual alpha silhouette, including full-color emoji.
+   Keep text-shadow as a fallback for image export renderers without CSS filters. */
+body[data-frame-mode="emoji"] .frame-side{
+  text-shadow:0 0 var(--frame-glow-size) var(--frame-glow-color);
+  filter:drop-shadow(0 0 calc(var(--frame-glow-size) * .25) var(--frame-glow-color))
+         drop-shadow(0 0 calc(var(--frame-glow-size) * .7) var(--frame-glow-color));
+}
 .no-border .emoji-frame{display:none!important}
 .frame-side{position:absolute;display:block;overflow:hidden;white-space:nowrap;letter-spacing:var(--frame-emoji-gap);user-select:none}
 .frame-top,.frame-bottom{left:calc(var(--frame-emoji-size) * .35);right:calc(var(--frame-emoji-size) * .35);height:calc(var(--frame-emoji-size) * 1.4);text-align:center}
