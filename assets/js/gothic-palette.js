@@ -53,8 +53,9 @@
   };
 
   function init() {
-    const inputs = [...document.querySelectorAll('#composer input[type="color"], #atmosphere-dialog input[type="color"]')];
-    if (!inputs.length) return;
+    const inputs = [];
+    const colorSelector = '#composer input[type="color"], #atmosphere-dialog input[type="color"]';
+    if (!document.querySelector(colorSelector)) return;
 
     const picker = make('dialog', 'gothic-palette-dialog');
     picker.setAttribute('aria-labelledby', 'gothic-palette-title');
@@ -244,7 +245,13 @@
       if (trigger.matches('.tool-color')) trigger.title = `${labelOf(colorInput)}: ${current}`;
       else trigger.setAttribute('aria-label', `Elegir ${labelOf(colorInput)}. Actual: ${current}`);
     }
-    for (const colorInput of inputs) {
+    function register(root = document) {
+      const candidates = [...root.querySelectorAll(colorSelector),
+        // Selector local: cuando los inputs se crean bajo #composer,
+        // :scope no encuentra el ancestro desde el nodo raíz (details).
+        ...root.querySelectorAll('input[type="color"][data-art-setting]')];
+      for (const colorInput of new Set(candidates)) {
+        if (colorInput._gothicTrigger) continue;
       // Only the native UI is replaced; the app's pre-existing events are retained.
       const label = colorInput.closest('label');
       colorInput.dataset.gothicLabel = labelOf(colorInput);
@@ -276,7 +283,12 @@
       colorInput.addEventListener('input', () => sync(colorInput));
       colorInput.addEventListener('change', () => sync(colorInput));
       sync(colorInput);
+      inputs.push(colorInput);
+      }
     }
+    register();
+    window.EmLetterColorPalette = {register};
+    window.dispatchEvent(new Event('emletter:color-palette-ready'));
     picker.querySelector('.gothic-palette-close').addEventListener('click', () => picker.close());
     picker.querySelector('.gothic-palette-cancel').addEventListener('click', () => picker.close());
     picker.addEventListener('close', () => {
@@ -315,6 +327,7 @@
     // Existing style/atmosphere presets may change values without input events.
     let queued = false;
     const updateAll = () => { queued = false; inputs.forEach(sync); };
+    window.addEventListener('emletter:art-colors-rendered', updateAll);
     new MutationObserver(() => {
       if (!queued) { queued = true; requestAnimationFrame(updateAll); }
     }).observe(document.documentElement, {attributes: true, attributeFilter: ['style']});

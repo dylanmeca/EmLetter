@@ -37,14 +37,10 @@
     }
     const candles=el('div','emletter-art-candles');candles.setAttribute('aria-hidden','true');
     header.append(candles,number);
-    const footer=el('div','emletter-art-footer');footer.setAttribute('aria-hidden','true');
-    footer.append(el('span','emletter-art-bottom-line'),el('span','emletter-art-crown','♕'),el('span','emletter-art-bottom-line'));
     paper.insertBefore(frame,paper.firstChild);
     paper.insertBefore(stars,paper.firstChild);
     const editor=$('#editor, #read-title',paper);
     if(editor)editor.before(header);else paper.append(header);
-    const signature=$('.letter-signature',paper);
-    if(signature)signature.before(footer);else paper.append(footer);
   }
   function render(style){
     for(const paper of document.querySelectorAll('#edit-paper,#read-paper')){
@@ -52,7 +48,10 @@
       const active=Boolean(style.artEnabled);
       paper.dataset.artActive=String(active);
       paper.classList.toggle('art-framed',active&&Boolean(style.artFrame));
+      // Compatibilidad: la cursiva global de enlaces antiguos se respeta,
+      // pero en diseños nuevos se controla desde el editor de texto.
       paper.classList.toggle('art-italic',active&&Boolean(style.artItalic));
+      paper.classList.toggle('art-bottom-lines',active&&Boolean(style.artCrown));
       paper.classList.toggle('art-text-glowing',active&&style.artTextGlow>0);
       paper.style.setProperty('--art-glow',style.artGlowColor);
       paper.style.setProperty('--art-number-color',style.artNumberColor);
@@ -77,8 +76,6 @@
         const stick=el('span','emletter-art-candle');stick.append(el('span','emletter-art-flame'));candleHolder.append(stick);
       }
       while(candleHolder.childElementCount>candleCount)candleHolder.lastChild.remove();
-      $('.emletter-art-footer',paper).hidden=!active||!style.artCrown;
-      $('.emletter-art-crown',paper).textContent=style.artCrownSymbol;
       for(const corner of paper.querySelectorAll('.emletter-art-corner'))corner.textContent=style.artCornerSymbol;
       for(const [i,star] of [...paper.querySelectorAll('.emletter-art-star')].entries()){
         star.hidden=!active||i>=style.artStars;
@@ -94,6 +91,7 @@
       const output=document.querySelector(`[data-art-output="${key}"]`);
       if(output)output.textContent=style[key]+(input.dataset.suffix||'');
     }
+    window.dispatchEvent(new Event('emletter:art-colors-rendered'));
   }
   window.EmLetterArt={render};
   function init(){
@@ -119,15 +117,12 @@
         ['artFrameInset','Distancia de las filigranas al borde','range',0,90,' px'],
         ['artStars','Cantidad de destellos','range',0,36,''],
         ['artStarSymbol','Símbolo de los destellos','select',['mixed','✦','✧','✶','★','⋆','❀','♡','✨']],
-        ['artCrown','Mostrar adorno inferior','checkbox'],
-        ['artCrownSymbol','Símbolo inferior','select',['♕','♛','❦','✦','♡','🎂','🎉','💜','🦋','🌹']],
-        ['artCrownSize','Tamaño del adorno inferior','range',24,120,' px'],
+        ['artCrown','Líneas junto al adorno inferior','checkbox'],
       ]},
       {name:'Brillo y composición',controls:[
         ['artGlowColor','Color del resplandor','color'],
         ['artGlowStrength','Intensidad del neón','range',0,60,' px'],
         ['artTextGlow','Brillo del texto de la carta','range',0,35,' px'],
-        ['artItalic','Texto principal en cursiva','checkbox'],
         ['artMinHeight','Altura mínima de la carta (0 = automática)','range',0,1200,' px'],
       ]}
     ];
@@ -159,6 +154,11 @@
       detail.append(content);
     }
     designer.append(detail);
+    // La paleta del editor se crea antes que estos controles dinámicos.
+    // Registrar los colores recién añadidos en esa MISMA paleta, no abrir
+    // el selector nativo del navegador.
+    if(window.EmLetterColorPalette?.register)window.EmLetterColorPalette.register(detail);
+    else window.addEventListener('emletter:color-palette-ready',()=>window.EmLetterColorPalette?.register(detail),{once:true});
     render(API().getStyle());
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
