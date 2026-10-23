@@ -216,6 +216,86 @@
     else paper.style.removeProperty('box-shadow');
   }
 
+  // html2canvas 1.4 no reproduce bien drop-shadow() en los emojis a color.
+  // Dibujamos el halo en el PNG final usando como máscara los píxeles alfa
+  // de cada lado del marco, sin alterar los propios emojis ni el diseño.
+  async function paintEmojiFrameGlow(canvas,renderer,stage,renderOptions,paper){
+    if(document.body.dataset.frameMode!=='emoji'||document.body.classList.contains('no-border'))return;
+    const glow=parseFloat(getComputedStyle(paper).getPropertyValue('--frame-glow-size'))||0;
+    if(glow<=0)return;
+    const sides=[...paper.querySelectorAll('.emoji-frame .frame-side')];
+    if(!sides.length)return;
+    const color=getComputedStyle(paper).getPropertyValue('--frame-glow-color').trim()||'#7c3cff';
+    const scale=renderOptions.scale;
+    const stageRect=stage.getBoundingClientRect();
+    const output=canvas.getContext('2d');
+    if(!output)throw new Error('No se pudo pintar el resplandor del marco en la imagen.');
+
+    for(const [index,side] of sides.entries()){
+      const rect=side.getBoundingClientRect();
+      if(rect.width<=0||rect.height<=0)continue;
+      const key=`emletter-glow-side-${index}`;
+      side.setAttribute('data-export-glow-key',key);
+      let mask;
+      try{
+        // Renderizamos únicamente la franja de emojis, no toda la carta.
+        // La copia del DOM no debe incluir su filtro ni su sombra: el halo
+        // se calcula después sobre los píxeles alfa reales del emoji.
+        mask=await renderer(side,{
+          backgroundColor:null,
+          scale,
+          useCORS:false,
+          allowTaint:false,
+          foreignObjectRendering:false,
+          logging:false,
+          imageTimeout:0,
+          width:Math.ceil(rect.width),
+          height:Math.ceil(rect.height),
+          windowWidth:renderOptions.windowWidth,
+          windowHeight:renderOptions.windowHeight,
+          scrollX:0,
+          scrollY:0,
+          removeContainer:true,
+          onclone(clonedDocument){
+            const cloned=clonedDocument.querySelector(`[data-export-glow-key="${key}"]`);
+            if(!cloned)return;
+            cloned.style.setProperty('filter','none','important');
+            cloned.style.setProperty('text-shadow','none','important');
+            cloned.style.setProperty('box-shadow','none','important');
+          }
+        });
+      }finally{
+        side.removeAttribute('data-export-glow-key');
+      }
+      if(!mask.width||!mask.height)continue;
+
+      // El margen permite que el desenfoque sobresalga por ambos lados de
+      // la franja. El canvas adicional es pequeño incluso en cartas largas.
+      const padding=Math.ceil(Math.max(6,glow*2)*scale);
+      const halo=document.createElement('canvas');
+      halo.width=mask.width+padding*2;
+      halo.height=mask.height+padding*2;
+      const context=halo.getContext('2d');
+      if(!context)throw new Error('No se pudo crear el halo de los emojis.');
+      context.shadowColor=color;
+      context.shadowBlur=glow*scale*1.2;
+      context.globalAlpha=.75;
+      context.drawImage(mask,padding,padding);
+      context.shadowBlur=glow*scale*.42;
+      context.globalAlpha=.9;
+      context.drawImage(mask,padding,padding);
+      context.globalAlpha=1;
+      context.shadowBlur=0;
+      // Borramos el interior de los emojis: solo queda su luz alrededor.
+      context.globalCompositeOperation='destination-out';
+      context.drawImage(mask,padding,padding);
+      context.globalCompositeOperation='source-over';
+      const x=(rect.left-stageRect.left)*scale-padding;
+      const y=(rect.top-stageRect.top)*scale-padding;
+      output.drawImage(halo,Math.round(x),Math.round(y));
+    }
+  }
+
   function cleanupClone(root){
     root.removeAttribute('id');
     for(const element of root.querySelectorAll('[id]'))element.removeAttribute('id');
@@ -302,6 +382,11 @@
     const paperWidth=Math.max(1,sourcePaper.getBoundingClientRect().width);
     const wrapper=getComputedStyle(sourcePaper.parentElement);
     const pageSpace=Math.max(0,parseFloat(wrapper.paddingLeft)||0);
+    // Reserva espacio para que el halo exterior no se recorte en el PNG.
+    const emojiGlow=document.body.dataset.frameMode==='emoji'&&!document.body.classList.contains('no-border')
+      ? parseFloat(getComputedStyle(sourcePaper).getPropertyValue('--frame-glow-size'))||0 : 0;
+    const emojiSize=emojiGlow>0?parseFloat(getComputedStyle(sourcePaper).getPropertyValue('--frame-emoji-size'))||18:0;
+    const exportPadding=Math.max(pageSpace,emojiGlow>0?Math.ceil(emojiGlow*2+emojiSize):0);
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -309,8 +394,8 @@
     stage.style.position='fixed';
     stage.style.left='-100000px';
     stage.style.top='0';
-    stage.style.width=`${Math.ceil(paperWidth+pageSpace*2)}px`;
-    stage.style.padding=`${pageSpace}px`;
+    stage.style.width=`${Math.ceil(paperWidth+exportPadding*2)}px`;
+    stage.style.padding=`${exportPadding}px`;
     stage.style.pointerEvents='none';
     stage.style.zIndex='-1';
 
@@ -367,7 +452,7 @@
       );
       if(!Number.isFinite(pixelRatio)||pixelRatio<0.55)throw new Error('La carta es demasiado larga para exportarla como una sola imagen en este dispositivo.');
 
-      const canvas=await renderer(stage,{
+      const renderOptions={
         backgroundColor:null,
         scale:pixelRatio,
         useCORS:false,
@@ -381,8 +466,17 @@
         windowHeight:Math.max(document.documentElement.clientHeight,height),
         scrollX:0,
         scrollY:0,
-        removeContainer:true
-      });
+        removeContainer:true,
+        onclone(clonedDocument){
+          // El brillo de emojis se rasteriza con Canvas 2D después de
+          // html2canvas; evitar un filtro CSS sin soporte en este render.
+          clonedDocument.querySelectorAll('.export-stage .emoji-frame .frame-side').forEach(side=>{
+            side.style.setProperty('filter','none','important');
+          });
+        }
+      };
+      const canvas=await renderer(stage,renderOptions);
+      await paintEmojiFrameGlow(canvas,renderer,stage,renderOptions,paper);
       return canvasToBlob(canvas);
     }finally{
       stage.remove();
