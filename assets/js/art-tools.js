@@ -21,7 +21,6 @@
     if($('.emletter-art-frame',paper))return;
     const frame=el('div','emletter-art-frame');frame.setAttribute('aria-hidden','true');
     for(const c of ['tl','tr','bl','br'])frame.append(el('span',`emletter-art-corner corner-${c}`,'❦'));
-    for(const c of ['top','right','bottom','left'])frame.append(el('span',`emletter-art-edge edge-${c}`));
     const stars=el('div','emletter-art-sparkles');stars.setAttribute('aria-hidden','true');
     ART_POSITIONS.forEach(([x,y,size],i)=>{
       const star=el('span','emletter-art-star',i%4===0?'✦':i%3===0?'✧':'⋆');
@@ -114,10 +113,10 @@
         ['artCandleCount','Cantidad de velas','range',1,8,''],
       ]},
       {name:'Adornos',controls:[
-        ['artFrame','Mostrar marco con filigranas','checkbox'],
+        ['artFrame','Mostrar filigranas en las esquinas','checkbox'],
         ['artCornerSymbol','Símbolo de las esquinas','select', ['❦','❧','✿','⚜','✦','♡','🌹','✨']],
         ['artCornerSize','Tamaño de las esquinas','range',20,120,' px'],
-        ['artFrameInset','Distancia del marco al borde','range',0,90,' px'],
+        ['artFrameInset','Distancia de las filigranas al borde','range',0,90,' px'],
         ['artStars','Cantidad de destellos','range',0,36,''],
         ['artStarSymbol','Símbolo de los destellos','select',['mixed','✦','✧','✶','★','⋆','❀','♡','✨']],
         ['artCrown','Mostrar adorno inferior','checkbox'],
