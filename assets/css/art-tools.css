@@ -106,3 +106,29 @@
 
 /* Respetar el interruptor general Mostrar adornos. */
 .no-ornaments .paper[data-art-active="true"].art-bottom-lines>.end-ornament{display:none!important}
+
+/* Los adornos de Celebración se seleccionan y colocan como elementos libres.
+   translate mueve cada pieza sin borrar los giros originales de las esquinas
+   ni el centrado y escala de las velas. */
+#edit-paper[data-art-active="true"] [data-art-item]:not([hidden]){
+  pointer-events:auto;
+  cursor:grab;
+  user-select:none;
+  touch-action:none;
+}
+#edit-paper[data-art-active="true"] [data-art-item].free-moving{cursor:grabbing;outline:1px dashed #bda3f2;outline-offset:3px}
+/* El ancho y alto de las velas usan em para que la herramienta Tamaño
+   de la barra de texto también las pueda escalar. */
+.emletter-art-candles{font-size:16px}
+.emletter-art-candle{width:.5em;height:1.875em}
+.emletter-art-flame{top:-2.625em;width:1.3125em;height:2.5625em}
+/* En modo edición, los símbolos puntuales deben estar por encima de la capa
+   de contenido para poder seleccionarlos incluso sobre un área de texto. */
+#edit-paper[data-art-active="true"] .emletter-art-sparkles,
+#edit-paper[data-art-active="true"] .emletter-art-frame{z-index:5}
+#edit-paper[data-art-active="true"] .emletter-art-star,
+#edit-paper[data-art-active="true"] .emletter-art-corner{position:absolute}
+
+/* La copia de exportación mantiene el mismo orden de capas que el editor. */
+.export-stage .emletter-art-sparkles,
+.export-stage .emletter-art-frame{z-index:5!important}
