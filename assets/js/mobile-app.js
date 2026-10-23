@@ -250,7 +250,8 @@
       ['El papel y su marco','▣','Papel y marco','Color, borde, neón y emoji'],
       ['Texto base de la carta','Aa','Texto base','Fuente, tamaño y lectura'],
       ['El título','T','Título','Tipografía, color y alineación'],
-      ['Adornos y firma','✦','Adornos y firma','Símbolos, brillo y firma']
+      ['Adornos y firma','✦','Adornos y firma','Símbolos, brillo y firma'],
+      ['Arte decorativo · Neón y celebración','♕','Arte decorativo','Números, velas, destellos y filigranas']
     ];
     const details=designDetails();
     for(const [summary,icon,label,desc] of categories){
