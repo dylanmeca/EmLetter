@@ -14,7 +14,14 @@ DOMPurify.addHook('afterSanitizeAttributes',node=>{
  if(node.tagName==='IMG'){const w=parseFloat(old.width);if(old.width.endsWith('%')&&w>=10&&w<=100)kept.push('width:'+w+'%');const radius=parseFloat(old.borderRadius);if(old.borderRadius.endsWith('px')&&radius>=0&&radius<=60)kept.push('border-radius:'+radius+'px');if(old.marginLeft==='auto')kept.push('margin-left:auto');if(old.marginRight==='auto')kept.push('margin-right:auto')}
  node.removeAttribute('style');if(kept.length)node.setAttribute('style',kept.join(';'));
  }
- if(node.tagName==='IMG'){try{const u=new URL(node.getAttribute('src'));if(!['http:','https:'].includes(u.protocol))throw Error();node.src=u.href;node.setAttribute('loading','lazy');node.setAttribute('referrerpolicy','no-referrer')}catch{node.removeAttribute('src')}}
+ if(node.tagName==='IMG'){
+  const value=node.getAttribute('src')||'';
+  // Solo imágenes rasterizadas y de tamaño limitado; nunca SVG, HTML ni URLs
+  // de datos arbitrarios. Así la transparencia manual sobrevive al enlace.
+  const local=/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(value)&&value.length<=150000;
+  if(!local){try{const u=new URL(value);if(!['http:','https:'].includes(u.protocol))throw Error();node.src=u.href}catch{node.removeAttribute('src')}}
+  node.setAttribute('loading','lazy');node.setAttribute('referrerpolicy','no-referrer');
+ }
  if(node.tagName==='A'){const href=node.getAttribute('href')||'';if(!/^(https?:|mailto:)/i.test(href))node.removeAttribute('href');node.setAttribute('rel','noopener noreferrer');node.setAttribute('target','_blank')}
  for(const attr of ['colspan','rowspan']){if(node.hasAttribute(attr)){const v=Number(node.getAttribute(attr));if(!Number.isInteger(v)||v<1||v>50)node.removeAttribute(attr)}}
 });
