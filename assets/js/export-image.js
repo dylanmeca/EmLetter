@@ -296,6 +296,162 @@
     }
   }
 
+
+  function cloneRendererOptions(renderOptions,overrides={}){
+    return {
+      backgroundColor:null,
+      scale:renderOptions.scale,
+      useCORS:false,
+      allowTaint:false,
+      foreignObjectRendering:false,
+      logging:false,
+      imageTimeout:0,
+      windowWidth:renderOptions.windowWidth,
+      windowHeight:renderOptions.windowHeight,
+      scrollX:0,
+      scrollY:0,
+      removeContainer:true,
+      ...overrides
+    };
+  }
+
+  function roundedRectPath(context,x,y,width,height,radius){
+    const safe=Math.max(0,Math.min(radius,Math.min(width,height)/2));
+    context.beginPath();
+    context.moveTo(x+safe,y);
+    context.arcTo(x+width,y,x+width,y+height,safe);
+    context.arcTo(x+width,y+height,x,y+height,safe);
+    context.arcTo(x,y+height,x,y,safe);
+    context.arcTo(x,y,x+width,y,safe);
+    context.closePath();
+  }
+
+  async function renderMaskCanvas(element,key,renderer,renderOptions,prepareClone){
+    const rect=element.getBoundingClientRect();
+    if(rect.width<=0||rect.height<=0)return null;
+    element.setAttribute('data-export-mask-key',key);
+    try{
+      return await renderer(element,cloneRendererOptions(renderOptions,{
+        width:Math.ceil(rect.width),
+        height:Math.ceil(rect.height),
+        onclone(clonedDocument){
+          const cloned=clonedDocument.querySelector(`[data-export-mask-key="${key}"]`);
+          if(!cloned)return;
+          cloned.style.setProperty('filter','none','important');
+          cloned.style.setProperty('text-shadow','none','important');
+          cloned.style.setProperty('box-shadow','none','important');
+          if(typeof prepareClone==='function')prepareClone(cloned,clonedDocument);
+        }
+      }));
+    }finally{
+      element.removeAttribute('data-export-mask-key');
+    }
+  }
+
+  function paintGlowFromMask(output,mask,x,y,{color,blur,scale,opacity=.85,clearInterior=true}){
+    if(!output||!mask?.width||!mask?.height||!(blur>0))return;
+    const padding=Math.ceil(Math.max(6,blur*2)*scale);
+    const halo=document.createElement('canvas');
+    halo.width=mask.width+padding*2;
+    halo.height=mask.height+padding*2;
+    const context=halo.getContext('2d');
+    if(!context)return;
+    context.shadowColor=color;
+    context.shadowBlur=blur*scale*1.2;
+    context.globalAlpha=Math.min(1,opacity*.78);
+    context.drawImage(mask,padding,padding);
+    context.shadowBlur=blur*scale*.55;
+    context.globalAlpha=Math.min(1,opacity);
+    context.drawImage(mask,padding,padding);
+    context.globalAlpha=1;
+    if(clearInterior){
+      context.shadowBlur=0;
+      context.globalCompositeOperation='destination-out';
+      context.drawImage(mask,padding,padding);
+      context.globalCompositeOperation='source-over';
+    }
+    output.drawImage(halo,Math.round(x-padding),Math.round(y-padding));
+  }
+
+  function paintNeonPaperFrame(canvas,stage,renderOptions,paper){
+    if(document.body.dataset.frameMode!=='neon'||document.body.classList.contains('no-border'))return;
+    const output=canvas.getContext('2d');
+    if(!output)return;
+    const paperRect=paper.getBoundingClientRect();
+    if(paperRect.width<=0||paperRect.height<=0)return;
+    const stageRect=stage.getBoundingClientRect();
+    const styles=getComputedStyle(paper);
+    const scale=renderOptions.scale;
+    const borderWidth=parseFloat(styles.borderTopWidth)||0;
+    const glow=parseFloat(styles.getPropertyValue('--frame-glow-size'))||0;
+    if(borderWidth<=0||glow<=0)return;
+    const radius=Math.max(
+      parseFloat(styles.borderTopLeftRadius)||0,
+      parseFloat(styles.borderTopRightRadius)||0,
+      parseFloat(styles.borderBottomRightRadius)||0,
+      parseFloat(styles.borderBottomLeftRadius)||0
+    );
+    const color=(styles.getPropertyValue('--frame-glow-color').trim()||styles.borderTopColor||'#a75bff');
+    const x=(paperRect.left-stageRect.left)*scale;
+    const y=(paperRect.top-stageRect.top)*scale;
+    const w=paperRect.width*scale;
+    const h=paperRect.height*scale;
+    output.save();
+    output.strokeStyle=color;
+    output.lineJoin='round';
+    output.lineCap='round';
+    output.lineWidth=Math.max(1,borderWidth*scale);
+    for(const [blur,alpha] of [[glow*1.4,.68],[glow*.7,.92]]){
+      output.shadowColor=color;
+      output.shadowBlur=Math.max(1,blur*scale);
+      output.globalAlpha=alpha;
+      roundedRectPath(output,x,y,w,h,Math.max(0,radius*scale-output.lineWidth/2));
+      output.stroke();
+    }
+    output.restore();
+  }
+
+  async function paintCelebrationGlows(canvas,renderer,stage,renderOptions,paper){
+    if(paper.dataset.artActive!=='true')return;
+    const output=canvas.getContext('2d');
+    if(!output)return;
+    const stageRect=stage.getBoundingClientRect();
+    const styles=getComputedStyle(paper);
+    const glowColor=styles.getPropertyValue('--art-glow').trim()||'#d6a7ff';
+    const glowStrength=parseFloat(styles.getPropertyValue('--art-glow-strength'))||0;
+    const ornamentColor=styles.getPropertyValue('--ornament-color').trim()||glowColor;
+    const ornamentGlow=parseFloat(styles.getPropertyValue('--ornament-glow'))||Math.max(4,glowStrength*.55);
+    const jobs=[];
+    const pushJob=(element,options={})=>{
+      if(!element||element.hidden)return;
+      const rect=element.getBoundingClientRect();
+      if(rect.width<=0||rect.height<=0)return;
+      jobs.push({element,rect,options});
+    };
+
+    if(paper.classList.contains('art-framed'))pushJob(paper.querySelector('.emletter-art-frame'),{color:glowColor,blur:Math.max(6,glowStrength),opacity:.88});
+    pushJob(paper.querySelector('.emletter-art-sparkles'),{color:glowColor,blur:Math.max(5,glowStrength*.72),opacity:.92});
+    const header=paper.querySelector('.emletter-art-header');
+    if(header&&!header.hidden){
+      pushJob(header.querySelector('.emletter-art-number'),{color:glowColor,blur:Math.max(8,glowStrength*1.12),opacity:.95});
+      pushJob(header.querySelector('.emletter-art-candles'),{color:glowColor,blur:Math.max(4,glowStrength*.6),opacity:.58});
+    }
+    if(paper.classList.contains('art-bottom-lines'))pushJob(paper.querySelector('.end-ornament'),{color:ornamentColor,blur:ornamentGlow,opacity:.76});
+
+    let index=0;
+    for(const job of jobs){
+      const x=(job.rect.left-stageRect.left)*renderOptions.scale;
+      const y=(job.rect.top-stageRect.top)*renderOptions.scale;
+      const key=`emletter-glow-mask-${index++}`;
+      const mask=await renderMaskCanvas(job.element,key,renderer,renderOptions,(cloned)=>{
+        cloned.style.setProperty('filter','none','important');
+        cloned.style.setProperty('text-shadow','none','important');
+        cloned.style.setProperty('box-shadow','none','important');
+      });
+      if(mask)paintGlowFromMask(output,mask,x,y,{...job.options,scale:renderOptions.scale,clearInterior:true});
+    }
+  }
+
   function cleanupClone(root){
     root.removeAttribute('id');
     for(const element of root.querySelectorAll('[id]'))element.removeAttribute('id');
@@ -387,10 +543,24 @@
     const wrapper=getComputedStyle(sourcePaper.parentElement);
     const pageSpace=Math.max(0,parseFloat(wrapper.paddingLeft)||0);
     // Reserva espacio para que el halo exterior no se recorte en el PNG.
+    const paperStyles=getComputedStyle(sourcePaper);
     const emojiGlow=document.body.dataset.frameMode==='emoji'&&!document.body.classList.contains('no-border')
-      ? parseFloat(getComputedStyle(sourcePaper).getPropertyValue('--frame-glow-size'))||0 : 0;
-    const emojiSize=emojiGlow>0?parseFloat(getComputedStyle(sourcePaper).getPropertyValue('--frame-emoji-size'))||18:0;
-    const exportPadding=Math.max(pageSpace,emojiGlow>0?Math.ceil(emojiGlow*2+emojiSize):0);
+      ? parseFloat(paperStyles.getPropertyValue('--frame-glow-size'))||0 : 0;
+    const emojiSize=emojiGlow>0?parseFloat(paperStyles.getPropertyValue('--frame-emoji-size'))||18:0;
+    const neonFrameGlow=document.body.dataset.frameMode==='neon'&&!document.body.classList.contains('no-border')
+      ? parseFloat(paperStyles.getPropertyValue('--frame-glow-size'))||0 : 0;
+    const artGlow=sourcePaper.dataset.artActive==='true'
+      ? parseFloat(paperStyles.getPropertyValue('--art-glow-strength'))||0 : 0;
+    const artCorner=sourcePaper.dataset.artActive==='true'
+      ? parseFloat(paperStyles.getPropertyValue('--art-corner-size'))||0 : 0;
+    const celebrationPadding=sourcePaper.dataset.artActive==='true'
+      ? Math.ceil(Math.max(artGlow*2+artCorner*.35,artGlow*2+20)) : 0;
+    const exportPadding=Math.max(
+      pageSpace,
+      emojiGlow>0?Math.ceil(emojiGlow*2+emojiSize):0,
+      neonFrameGlow>0?Math.ceil(neonFrameGlow*2+8):0,
+      celebrationPadding
+    );
 
     const stage=document.createElement('div');
     stage.className='export-stage';
@@ -488,6 +658,8 @@
         }
       };
       const canvas=await renderer(stage,renderOptions);
+      paintNeonPaperFrame(canvas,stage,renderOptions,paper);
+      await paintCelebrationGlows(canvas,renderer,stage,renderOptions,paper);
       await paintEmojiFrameGlow(canvas,renderer,stage,renderOptions,paper);
       return canvasToBlob(canvas);
     }finally{
