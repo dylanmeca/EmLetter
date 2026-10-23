@@ -1207,3 +1207,19 @@ body.no-ornaments .paper .end-ornament{display:none!important}
 /* La posición izquierda/centro/derecha depende del papel, no de una
    decoración absoluta que ocasionalmente ensancha el contenedor. */
 #edit-paper,#read-paper{box-sizing:border-box;min-width:0}
+
+/* Arrastre repetido de ornamentos e imágenes Tiptap. */
+#edit-paper .ornament.ornament-top,
+#edit-paper .end-ornament{cursor:grab;touch-action:manipulation}
+#edit-paper .ornament.ornament-top.free-moving,
+#edit-paper .end-ornament.free-moving{cursor:grabbing;display:flex!important}
+#edit-paper .end-ornament.free-moving{display:block!important}
+#edit-paper #editor .tiptap>img{cursor:grab;touch-action:manipulation}
+#edit-paper #editor .tiptap>img.free-moving{position:absolute!important;cursor:grabbing}
+/* Mantiene accesibles los adornos tras desplazarlos, aunque coincidan con
+   otros elementos del flujo normal. */
+#edit-paper .ornament.ornament-top:is(.free-placed,.free-moving){position:relative!important;z-index:20!important}
+#edit-paper .end-ornament:is(.free-placed,.free-moving){position:relative!important;z-index:19!important}
+#edit-paper .ornament.ornament-top.free-moving,
+#edit-paper .end-ornament.free-moving,
+#edit-paper #editor .tiptap>img.free-moving{pointer-events:auto!important}

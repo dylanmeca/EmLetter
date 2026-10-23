@@ -1,0 +1,30 @@
+/* Editor de imágenes en el mismo diálogo del editor de cartas. */
+#image-dialog{width:min(760px,calc(100vw - 20px));max-width:760px;max-height:calc(100dvh - 28px);overflow:auto}
+#image-dialog::backdrop{background:#030616c9}
+#image-dialog #image-form{min-width:0}
+#image-dialog .image-studio{display:grid;gap:12px;margin:18px 0 16px;padding:16px;background:#10192e;border:1px solid #344367;border-radius:12px;color:#e8eaff}
+#image-dialog .image-studio-file-label{font-weight:600;font-size:13px;display:block}
+#image-dialog #image-studio-file{color:#e6eaff;width:100%;max-width:100%;background:#141c32;border:1px solid #45587b;border-radius:8px;padding:9px;font-size:13px}
+#image-dialog .image-studio-preview{display:flex;justify-content:center;align-items:center;min-height:220px;max-height:390px;padding:14px;position:relative;background-color:#e4e4e9;background-image:linear-gradient(45deg,#b9bbc7 25%,transparent 25%),linear-gradient(-45deg,#b9bbc7 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#b9bbc7 75%),linear-gradient(-45deg,transparent 75%,#b9bbc7 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;border-radius:10px;overflow:hidden}
+#image-dialog .image-studio-preview canvas{display:block;width:auto;height:auto;max-width:100%;max-height:360px;object-fit:contain;box-shadow:0 6px 24px #0005;touch-action:none;cursor:default}
+#image-dialog .image-studio-preview canvas.image-studio-working{cursor:crosshair}
+#image-dialog #image-studio-empty{padding:20px;max-width:320px;text-align:center;background:#111e35e0;border-radius:8px;color:#edf3ff;font-size:13px}
+#image-dialog .image-studio-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+#image-dialog .image-studio-row>label{display:block;min-width:0;color:#e0e8fb;font-size:13px}
+#image-dialog .image-studio-row>label>select,
+#image-dialog .image-studio-row>label>input[type=range]{display:block;width:100%;margin-top:8px}
+#image-dialog .image-studio-row output{font-size:12px;color:#bac7e7;margin-left:6px}
+#image-dialog .image-studio-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;grid-column:1/-1}
+#image-dialog .image-studio-tools button{flex:1 1 auto;min-height:34px;padding:6px 9px;font-size:12px}
+#image-dialog .image-studio-tools button.is-active{background:#61478c;color:#fff;border-color:#dbc1ff}
+#image-dialog .image-studio-note{font-size:12px;line-height:1.5;color:#adbde0;margin:0}
+@media(max-width:540px){
+ #image-dialog{width:calc(100vw - 14px);max-height:calc(100dvh - 14px);margin:auto;padding:14px}
+ #image-dialog .image-studio{padding:11px}
+ #image-dialog .image-studio-row{grid-template-columns:1fr;gap:10px}
+ #image-dialog .image-studio-preview{min-height:160px;max-height:280px;padding:10px}
+ #image-dialog .image-studio-preview canvas{max-height:250px}
+}
+
+#image-dialog .image-studio-preview img#image-studio-fallback{max-width:100%;max-height:360px;object-fit:contain}
+#image-dialog .image-studio-preview :is(img,canvas)[hidden]{display:none!important}
