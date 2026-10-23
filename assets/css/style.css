@@ -1176,3 +1176,34 @@ body.mobile-native .mobile-insert-grid #add-floating-text,body.mobile-native .mo
   body.mobile-native #composer>.bottom-note{display:none!important}
   body.mobile-native #composer.mobile-footer-expanded>.bottom-note{display:flex!important}
 }
+
+
+/* El interruptor global controla ambos adornos originales de la carta.
+   La regla anterior perdía prioridad ante .ornament.ornament-top. */
+body.no-ornaments .paper .ornament.ornament-top,
+body.no-ornaments .paper .end-ornament{display:none!important}
+
+/* Un elemento de Celebración movido conserva su tipo de posicionamiento.
+   Las reglas generales .free-moving/.free-placed antes lo hacían relativo,
+   rompiendo las coordenadas absolutas de estrellas, velas y filigranas. */
+#edit-paper [data-art-item].free-placed,
+#edit-paper [data-art-item].free-moving{will-change:translate}
+#edit-paper .emletter-art-star:is(.free-moving,.free-placed),
+#edit-paper .emletter-art-number-glint:is(.free-moving,.free-placed),
+#edit-paper .emletter-art-candles:is(.free-moving,.free-placed),
+#edit-paper .emletter-art-corner:is(.free-moving,.free-placed){position:absolute!important}
+#edit-paper .emletter-art-number:is(.free-moving,.free-placed){position:relative!important}
+#edit-paper .emoji-frame .frame-side:is(.free-moving,.free-placed){position:absolute!important}
+/* La edición libre solo se activa sobre los símbolos, no sobre sus capas. */
+#edit-paper .emletter-art-sparkles,
+#edit-paper .emletter-art-frame{pointer-events:none;overflow:visible;z-index:5}
+#edit-paper .emletter-art-corner,
+#edit-paper .emletter-art-star,
+#edit-paper .emletter-art-number-glint,
+#edit-paper .emletter-art-number,
+#edit-paper .emletter-art-candles{pointer-events:auto;cursor:grab;touch-action:manipulation}
+#edit-paper [data-art-item].free-moving{cursor:grabbing}
+
+/* La posición izquierda/centro/derecha depende del papel, no de una
+   decoración absoluta que ocasionalmente ensancha el contenedor. */
+#edit-paper,#read-paper{box-sizing:border-box;min-width:0}

@@ -61,7 +61,7 @@
 .emletter-art-corner.corner-tr{top:0;right:0;transform:translate(15%,-15%) scaleX(-1)}
 .emletter-art-corner.corner-bl{bottom:0;left:0;transform:translate(-15%,15%) scaleY(-1)}
 .emletter-art-corner.corner-br{bottom:0;right:0;transform:translate(15%,15%) scale(-1)}
-.emletter-art-sparkles{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.emletter-art-sparkles{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:visible}
 .emletter-art-star{position:absolute;color:var(--art-glow);text-shadow:0 0 5px #fff,0 0 var(--art-glow-strength) var(--art-glow);line-height:1}
 .emletter-art-star[hidden],.emletter-art-header[hidden],.emletter-art-candles[hidden]{display:none!important}
 .emletter-art-header{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(var(--art-number-size) * 1.04);margin:var(--art-header-space,45px) 8px 9px;line-height:1}
