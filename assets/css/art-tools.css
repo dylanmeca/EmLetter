@@ -6,8 +6,7 @@
 .emletter-art-panel input[type=text]{background:#00061a;color:#eef2ff;border:1px solid #35415d;border-radius:5px;padding:9px}
 .paper[data-art-active="false"] .emletter-art-frame,
 .paper[data-art-active="false"] .emletter-art-sparkles,
-.paper[data-art-active="false"] .emletter-art-header,
-.paper[data-art-active="false"] .emletter-art-footer{display:none!important}
+.paper[data-art-active="false"] .emletter-art-header{display:none!important}
 .paper[data-art-active="true"]{isolation:isolate}
 /* Las filigranas son adornos de esquinas, no un segundo marco. La línea,
    el grosor y el tipo de marco siguen controlándose en «El papel y su marco». */
@@ -64,7 +63,7 @@
 .emletter-art-corner.corner-br{bottom:0;right:0;transform:translate(15%,15%) scale(-1)}
 .emletter-art-sparkles{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
 .emletter-art-star{position:absolute;color:var(--art-glow);text-shadow:0 0 5px #fff,0 0 var(--art-glow-strength) var(--art-glow);line-height:1}
-.emletter-art-star[hidden],.emletter-art-header[hidden],.emletter-art-footer[hidden],.emletter-art-candles[hidden]{display:none!important}
+.emletter-art-star[hidden],.emletter-art-header[hidden],.emletter-art-candles[hidden]{display:none!important}
 .emletter-art-header{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(var(--art-number-size) * 1.04);margin:var(--art-header-space,45px) 8px 9px;line-height:1}
 .emletter-art-number{font-family:'Cinzel Decorative',Georgia,serif;font-size:min(var(--art-number-size),32vw);font-weight:700;letter-spacing:-.035em;line-height:1.05;color:var(--art-number-color);-webkit-text-stroke:1px var(--art-glow);text-shadow:0 0 3px #fff,0 0 var(--art-glow-strength) var(--art-glow),0 0 var(--art-glow-strength) var(--art-glow);white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
 .emletter-art-candles{position:absolute;top:-15px;left:50%;transform:translateX(-50%);width:min(70%,420px);height:75px;display:flex;align-items:flex-end;justify-content:space-around;z-index:3;pointer-events:none}
@@ -75,19 +74,35 @@
 .paper[data-art-active="true"].art-italic .tiptap p,
 .paper[data-art-active="true"].art-italic .letter-content p{font-style:italic}
 .paper[data-art-active="true"] .end-ornament,.paper[data-art-active="true"] .letter-signature{position:relative;z-index:2}
-.emletter-art-footer{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;gap:18px;margin:12px auto 30px;color:var(--art-glow);text-shadow:0 0 var(--art-glow-strength) var(--art-glow)}
-.emletter-art-crown{font:var(--art-crown-size)/1 Georgia,serif}
-.emletter-art-bottom-line{height:1px;width:clamp(40px,17%,155px);background:linear-gradient(90deg,transparent,currentColor);box-shadow:0 0 var(--art-glow-strength) var(--art-glow)}
-.emletter-art-bottom-line:last-child{transform:scaleX(-1)}
+/* Aprovecha el adorno inferior del editor; nunca crea otro símbolo. */
+.paper[data-art-active="true"].art-bottom-lines>.end-ornament{
+  display:flex;
+  gap:18px;
+  align-items:center;
+  justify-content:center;
+}
+.paper[data-art-active="true"].art-bottom-lines>.end-ornament::before,
+.paper[data-art-active="true"].art-bottom-lines>.end-ornament::after{
+  content:"";
+  display:block;
+  flex:0 1 125px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--ornament-color));
+  box-shadow:0 0 var(--ornament-glow) var(--ornament-color);
+}
+.paper[data-art-active="true"].art-bottom-lines>.end-ornament::after{
+  transform:scaleX(-1);
+}
 .emletter-art-number-glint{position:absolute;z-index:4;color:#fff;pointer-events:none;opacity:.82;text-shadow:0 0 4px #fff,0 0 var(--art-glow-strength) var(--art-glow);line-height:1}
 @media(max-width:760px){
   .emletter-art-header{min-height:calc(min(var(--art-number-size),32vw) * 1.25)}
   .emletter-art-candles{width:55%;height:42px;top:-9px;transform:translateX(-50%) scale(.65);transform-origin:center bottom}
   .emletter-art-corner{font-size:min(var(--art-corner-size),12vw);width:min(calc(var(--art-corner-size) * 1.75),21vw);height:min(calc(var(--art-corner-size) * 1.75),21vw)}
   .paper[data-art-active="true"] .emletter-art-number{font-size:min(var(--art-number-size),32vw)}
-  .emletter-art-crown{font-size:min(var(--art-crown-size),18vw)}
 }
 /* En PNG se utiliza el ancho de carta elegido, no el de la pantalla móvil. */
 .export-stage .paper[data-art-active="true"] .emletter-art-number{font-size:var(--art-number-size)!important}
 .export-stage .paper[data-art-active="true"] .emletter-art-corner{font-size:var(--art-corner-size)!important}
-.export-stage .paper[data-art-active="true"] .emletter-art-crown{font-size:var(--art-crown-size)!important}
+
+/* Respetar el interruptor general Mostrar adornos. */
+.no-ornaments .paper[data-art-active="true"].art-bottom-lines>.end-ornament{display:none!important}
