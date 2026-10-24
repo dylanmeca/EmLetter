@@ -32,7 +32,7 @@ export function cleanPlacement(value){
   if(!b||!Number.isInteger(b.i)||b.i<0||b.i>1000||!Number.isFinite(b.x)||!Number.isFinite(b.y))continue;
   data.blocks.push({i:b.i,s:typeof b.s==='string'?b.s.slice(0,124):'',x:Math.max(-1600,Math.min(1600,Math.round(b.x))),y:Math.max(-1600,Math.min(1600,Math.round(b.y)))});
  }
- const allowed=['ornament','central','lineLeft','lineRight','final','signature','frameTop','frameRight','frameBottom','frameLeft','artNumber','artCandles',...['TL','TR','BL','BR'].map(c=>'artCorner'+c),...Array.from({length:36},(_,i)=>'artStar'+i),...Array.from({length:6},(_,i)=>'artGlint'+i)];
+ const allowed=['ornament','central','lineLeft','lineRight','final','finalLineLeft','finalLineRight','signature','frameTop','frameRight','frameBottom','frameLeft','artNumber','artCandles',...['TL','TR','BL','BR'].map(c=>'artCorner'+c),...Array.from({length:36},(_,i)=>'artStar'+i),...Array.from({length:6},(_,i)=>'artGlint'+i)];
  if(value.decor&&typeof value.decor==='object')for(const key of allowed){
   const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
   if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y)){
