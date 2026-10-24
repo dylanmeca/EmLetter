@@ -296,8 +296,8 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
   letter-spacing:0;
   text-shadow:0 0 var(--ornament-glow) var(--ornament-color);
 }
-.ornament-symbol{display:inline-flex;align-items:center;justify-content:center;min-width:1.25em;line-height:1}
-.ornament-line{
+.ornament-symbol,.end-ornament-symbol{display:inline-flex;align-items:center;justify-content:center;min-width:1.25em;line-height:1}
+.ornament-line,.end-ornament-line{
   display:inline-block;
   flex:0 1 var(--ornament-line-width);
   width:var(--ornament-line-width);
@@ -309,28 +309,28 @@ body{font-family:Inter,"Segoe UI",Arial,sans-serif;background-color:var(--bg)}
   color:var(--ornament-line-color);
   text-shadow:0 0 var(--ornament-glow) var(--ornament-line-color);
 }
-body[data-ornament-line-style="double"] .ornament-line{border-top-style:double;border-top-width:max(3px,var(--ornament-line-thickness))}
-body[data-ornament-line-style="dashed"] .ornament-line{border-top-style:dashed}
-body[data-ornament-line-style="dotted"] .ornament-line{border-top-style:dotted}
-body[data-ornament-line-style="crosses"] .ornament-line,
-body[data-ornament-line-style="diamonds"] .ornament-line,
-body[data-ornament-line-style="stars"] .ornament-line,
-body[data-ornament-line-style="thorns"] .ornament-line,
-body[data-ornament-line-style="hearts"] .ornament-line,
-body[data-ornament-line-style="moons"] .ornament-line,
-body[data-ornament-line-style="sparkles"] .ornament-line,
-body[data-ornament-line-style="flowers"] .ornament-line,
-body[data-ornament-line-style="fleur"] .ornament-line,
-body[data-ornament-line-style="chains"] .ornament-line,
-body[data-ornament-line-style="arrows"] .ornament-line,
-body[data-ornament-line-style="waves"] .ornament-line,
-body[data-ornament-line-style="lace"] .ornament-line,
-body[data-ornament-line-style="skulls"] .ornament-line,
-body[data-ornament-line-style="music"] .ornament-line,
-body[data-ornament-line-style="runes"] .ornament-line,
-body[data-ornament-line-style="celestial"] .ornament-line,
-body[data-ornament-line-style="baroque"] .ornament-line,
-body[data-ornament-line-style="roses"] .ornament-line{
+body[data-ornament-line-style="double"] :is(.ornament-line,.end-ornament-line){border-top-style:double;border-top-width:max(3px,var(--ornament-line-thickness))}
+body[data-ornament-line-style="dashed"] :is(.ornament-line,.end-ornament-line){border-top-style:dashed}
+body[data-ornament-line-style="dotted"] :is(.ornament-line,.end-ornament-line){border-top-style:dotted}
+body[data-ornament-line-style="crosses"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="diamonds"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="stars"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="thorns"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="hearts"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="moons"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="sparkles"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="flowers"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="fleur"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="chains"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="arrows"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="waves"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="lace"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="skulls"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="music"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="runes"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="celestial"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="baroque"] :is(.ornament-line,.end-ornament-line),
+body[data-ornament-line-style="roses"] :is(.ornament-line,.end-ornament-line){
   width:auto;
   max-width:42%;
   height:auto;
@@ -343,14 +343,20 @@ body[data-ornament-line-style="roses"] .ornament-line{
   line-height:1.25;
   letter-spacing:.14em;
 }
-body[data-ornament-line-style="none"] .ornament-line{display:none}
+body[data-ornament-line-style="none"] :is(.ornament-line,.end-ornament-line){display:none}
 .end-ornament{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:14px;
   color:var(--ornament-color);
   margin:26px 0 0;
   font-size:var(--ornament-size);
   line-height:1;
   text-shadow:0 0 var(--ornament-glow) var(--ornament-color);
 }
+.end-ornament-line{max-width:32%;}
+.end-ornament-symbol{color:var(--ornament-color);text-shadow:0 0 var(--ornament-glow) var(--ornament-color);}
 .emoji-frame{display:none;position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:inherit;color:var(--frame-color);text-shadow:0 0 var(--frame-glow-size) var(--frame-glow-color);font-size:var(--frame-emoji-size);line-height:1.15}
 body[data-frame-mode="emoji"] .emoji-frame{display:block}
 /* Glow follows each emoji's actual alpha silhouette, including full-color emoji.
@@ -1123,7 +1129,7 @@ body[data-frame-mode="emoji"] .frame-side{
 #edit-paper .free-moving{position:relative!important;z-index:9!important;outline:1px dashed #a6b6e9!important;outline-offset:6px;cursor:move;user-select:none;pointer-events:none;filter:drop-shadow(0 0 7px #8390bf66)}
 #edit-paper .free-placed{position:relative;will-change:transform}
 #edit-paper .emoji-frame .frame-side{pointer-events:auto}
-#edit-paper .ornament-symbol,#edit-paper .ornament-line,#edit-paper .end-ornament,#edit-paper .letter-signature{cursor:grab}
+#edit-paper :is(.ornament-symbol,.ornament-line,.end-ornament-symbol,.end-ornament-line,.letter-signature){cursor:grab}
 @media (max-width:760px){.placing-element #edit-paper{touch-action:none}}
 
 /* Capas editables para texto y emoji libres, incluidas en los enlaces y la exportación. */
@@ -1209,17 +1215,12 @@ body.no-ornaments .paper .end-ornament{display:none!important}
 #edit-paper,#read-paper{box-sizing:border-box;min-width:0}
 
 /* Arrastre repetido de ornamentos e imágenes Tiptap. */
-#edit-paper .ornament.ornament-top,
-#edit-paper .end-ornament{cursor:grab;touch-action:manipulation}
-#edit-paper .ornament.ornament-top.free-moving,
-#edit-paper .end-ornament.free-moving{cursor:grabbing;display:flex!important}
-#edit-paper .end-ornament.free-moving{display:block!important}
+#edit-paper :is(.ornament-symbol,.ornament-line,.end-ornament-symbol,.end-ornament-line){touch-action:manipulation}
+#edit-paper :is(.ornament-symbol,.ornament-line,.end-ornament-symbol,.end-ornament-line).free-moving{cursor:grabbing;display:inline-flex!important}
 #edit-paper #editor .tiptap>img{cursor:grab;touch-action:manipulation}
 #edit-paper #editor .tiptap>img.free-moving{position:absolute!important;cursor:grabbing}
 /* Mantiene accesibles los adornos tras desplazarlos, aunque coincidan con
    otros elementos del flujo normal. */
-#edit-paper .ornament.ornament-top:is(.free-placed,.free-moving){position:relative!important;z-index:20!important}
-#edit-paper .end-ornament:is(.free-placed,.free-moving){position:relative!important;z-index:19!important}
-#edit-paper .ornament.ornament-top.free-moving,
-#edit-paper .end-ornament.free-moving,
+#edit-paper :is(.ornament-symbol,.ornament-line,.end-ornament-symbol,.end-ornament-line):is(.free-placed,.free-moving){position:relative!important;z-index:20!important}
+#edit-paper :is(.ornament-symbol,.ornament-line,.end-ornament-symbol,.end-ornament-line).free-moving,
 #edit-paper #editor .tiptap>img.free-moving{pointer-events:auto!important}
