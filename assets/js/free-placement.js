@@ -20,6 +20,14 @@
     const w=paper.clientWidth;
     const rect=item.element.getBoundingClientRect();
     const width=Math.max(1,Math.min(w,rect.width||40));
+    if(item.kind==='image'){
+      const pad=24;
+      const originX=root.getBoundingClientRect().left-paper.getBoundingClientRect().left;
+      const originY=root.getBoundingClientRect().top-paper.getBoundingClientRect().top;
+      const h=Math.max(1,item.element.getBoundingClientRect().height||55);
+      return {x:clamp(Math.max(pad-width-originX,Math.min(nx,w-pad-originX))),
+        y:clamp(Math.max(pad-h-originY,Math.min(ny,paper.clientHeight-pad-originY)))};
+    }
     if(item.kind==='sticker')return {x:Math.max(0,Math.min(nx,w-width-4)),y:ny};
     if(item.kind==='block'&&!isImage){
       const contentWidth=root?.clientWidth||w;
@@ -50,7 +58,7 @@
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
   let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
   // Captura propia del gesto: Tiptap no debe robar el arrastre de las imágenes.
-  let imageDrag=null, pendingImageDrag=null;
+  let imageDrag=null;
   const isFloating=b=>Boolean(b&&typeof b.s==='string'&&b.s.startsWith('!'));
   const rawSignature=b=>isFloating(b)?b.s.slice(1):b?.s;
   const nextSignature=(n,free)=> (free?'!':'')+signature(n);
@@ -196,14 +204,21 @@
       const free=isFloating(b)||(moving&&active.free);
       const x=moving?active.x:(b?.x||0),y=moving?active.y:(b?.y||0);
       if(!free&&!moving&&!x&&!y)continue;
-      if(free)maxBottom=Math.max(maxBottom,Math.max(0,y)+Math.max(45,n.getBoundingClientRect().height));
+      if(free){
+        const estimated=n.tagName==='IMG'?Math.max(40,(root.clientWidth*Math.min(100,parseFloat(n.style.width)||100)/100)*(n.naturalHeight||1)/Math.max(1,n.naturalWidth||1)):n.getBoundingClientRect().height;
+        maxBottom=Math.max(maxBottom,Math.max(0,y)+Math.max(45,estimated));
+      }
       const nth=[...root.children].indexOf(n)+1;
       if(nth<1)continue;
       // Las imágenes liberadas conservan el porcentaje elegido en el cuadro
       // Insertar imagen. width:max-content las agrandaba indebidamente.
       const imageWidth=n.tagName==='IMG'?Math.max(10,Math.min(100,parseFloat(n.style.width)||100)):null;
       const freeWidth=imageWidth!==null?`width:${imageWidth}%!important;min-width:0!important;`:'width:max-content;min-width:min(35px,100%);';
-      const base=free?`position:absolute!important;left:${clamp(x)}px!important;top:${clamp(y)}px!important;transform:none!important;z-index:${moving?12:7};max-width:100%;${freeWidth}box-sizing:border-box;margin:0!important;`:
+      // La imagen original permanece en Tiptap para serializarla. Solo se
+      // oculta en el editor: su réplica arrastrable vive en la capa libre.
+      const base=free&&n.tagName==='IMG'?
+        'position:absolute!important;left:0!important;top:0!important;width:0!important;height:0!important;min-width:0!important;max-width:0!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important;margin:0!important;transform:none!important;':
+        free?`position:absolute!important;left:${clamp(x)}px!important;top:${clamp(y)}px!important;transform:none!important;z-index:${moving?12:7};max-width:100%;${freeWidth}box-sizing:border-box;margin:0!important;`:
         `position:relative;transform:translate(${clamp(x)}px,${clamp(y)}px)!important;`;
       rules.push(`#edit-paper #editor .tiptap > :nth-child(${nth}){${base}${moving?'outline:1px dashed #a6b6e9;outline-offset:5px;pointer-events:auto;filter:drop-shadow(0 0 7px #8390bf66);':''}}`);
     }
@@ -225,7 +240,115 @@
     readerSheet.textContent=rules.join('\n');
     parent.style.minHeight=maxBottom?Math.min(3200,maxBottom+22)+'px':'';
   }
+  // Las imágenes flotantes funcionan igual que los textos/emoji libres:
+  // un elemento independiente en una capa ABSOLUTA del papel, sin Tiptap
+  // gestionando el elemento que se mueve. La imagen del documento se conserva
+  // oculta para permitir guardado, vista previa y edición posteriores.
+  function imageLayer(){
+    let layer=editingPaper.querySelector(':scope > .free-image-layer');
+    if(!layer){layer=document.createElement('div');layer.className='free-image-layer';editingPaper.append(layer)}
+    return layer;
+  }
+  function imageOverlay(index){
+    return [...imageLayer().children].find(n=>Number(n.dataset.imageIndex)===index)||null;
+  }
+  function imageBase(){
+    const a=root.getBoundingClientRect(),b=editingPaper.getBoundingClientRect();
+    return {x:a.left-b.left,y:a.top-b.top};
+  }
+  function moveImageOverlay(element,x,y){
+    const base=imageBase();
+    element.style.left=clamp(base.x+x)+'px';
+    element.style.top=clamp(base.y+y)+'px';
+  }
+  function renderImages(){
+    if(!root)return;
+    const layer=imageLayer(),entries=children(editingPaper),valid=new Set();
+    entries.forEach((original,index)=>{
+      if(original.tagName!=='IMG')return;
+      const point=findBlock(original);
+      if(!isFloating(point))return;
+      valid.add(index);
+      let visual=imageOverlay(index);
+      if(!visual){
+        visual=document.createElement('img');
+        visual.className='free-image-overlay';
+        visual.dataset.imageIndex=String(index);
+        visual.draggable=false;
+        visual.setAttribute('aria-label','Imagen libre: arrastra para mover');
+        visual.addEventListener('dragstart',ev=>ev.preventDefault());
+        visual.addEventListener('load',()=>{if(!active){paintBlocks();renderImages()}});
+        layer.append(visual);
+      }
+      const src=original.getAttribute('src');
+      if(visual.getAttribute('src')!==src)visual.setAttribute('src',src||'');
+      visual.alt=original.alt||'';
+      visual.style.width=Math.max(24,root.clientWidth*Math.min(100,Math.max(10,parseFloat(original.style.width)||100))/100)+'px';
+      visual.style.borderRadius=original.style.borderRadius||getComputedStyle(original).borderRadius||'0';
+      visual.style.objectFit='contain';
+      visual.style.maxWidth='none';
+      const moving=active?.kind==='image'&&active.index===index;
+      if(moving){
+        active.element=visual;
+        visual.classList.add('free-moving');
+      }else visual.classList.remove('free-moving');
+      const x=moving?active.x:point.x,y=moving?active.y:point.y;
+      moveImageOverlay(visual,x,y);
+    });
+    for(const el of [...layer.children])if(!valid.has(Number(el.dataset.imageIndex)))el.remove();
+  }
+  function imageFromElement(node){
+    if(!(node instanceof Element))return null;
+    const floating=node.closest('.free-image-overlay');
+    if(floating&&editingPaper.contains(floating)){
+      const index=Number(floating.dataset.imageIndex);
+      const source=children(editingPaper)[index];
+      if(source?.tagName==='IMG')return {kind:'image',source,element:floating,index};
+    }
+    const source=node.closest('#edit-paper #editor .tiptap > img');
+    if(source&&editingPaper.contains(source)){
+      const index=children(editingPaper).indexOf(source);
+      if(index>=0)return {kind:'image',source,element:source,index};
+    }
+    return null;
+  }
+  function selectImageSource(source){
+    const ed=root?.editor;
+    if(!ed||!source?.isConnected)return;
+    let pos=null;
+    ed.state.doc.descendants((node,n)=>{
+      if(node.type.name==='image'&&ed.view.nodeDOM(n)===source){pos=n;return false}
+    });
+    if(pos!==null){
+      try{ed.commands.setNodeSelection(pos)}catch{}
+    }
+  }
+  function beginImage(item,ev){
+    if(!root||!item?.source?.isConnected)return;
+    const source=item.source;
+    const index=children(editingPaper).indexOf(source);
+    if(index<0)return;
+    let point=findBlock(source);
+    if(!isFloating(point)){
+      const rect=source.getBoundingClientRect(),base=root.getBoundingClientRect();
+      const x=clamp(rect.left-base.left),y=clamp(rect.top-base.top);
+      layout.blocks=layout.blocks.filter(b=>b.i!==index);
+      point={i:index,s:nextSignature(source,true),x,y};
+      layout.blocks.push(point);
+      changed();
+    }
+    paintBlocks();
+    renderImages();
+    const visual=imageOverlay(index);
+    if(!visual)return;
+    selectedFree={kind:'block',element:source};
+    active={kind:'image',element:visual,source,free:true,index,sig:signature(source),
+      x:point.x,y:point.y,startX:ev.clientX,startY:ev.clientY,originX:point.x,originY:point.y};
+    visual.classList.add('free-moving');
+    document.body.classList.add('placing-element');
+  }
   function transform(n,x,y){
+    if(n.classList?.contains('free-image-overlay')){moveImageOverlay(n,x,y);return}
     if(root?.contains(n)){paintBlocks();return}
     if(n.classList.contains('free-sticker')){n.style.left=clamp(x)+'px';n.style.top=clamp(y)+'px';return}
     if(n.hasAttribute('data-art-item')){
@@ -253,7 +376,7 @@
       }else if(!active||active.element!==n)transform(n,0,0);
     }
     renderStickers(paper);
-    if(isEdit)paintBlocks();else paintReader();
+    if(isEdit){paintBlocks();renderImages()}else paintReader();
     for(const key of dKeys){
       const el=paper.querySelector(decorations[key]);
       if(!el)continue;
@@ -376,7 +499,7 @@
       if(!a&&!b)delete layout.decor[item.key];
       else layout.decor[item.key]={x:a,y:b};
     }else{
-      const entries=children(editingPaper);let index=entries.indexOf(item.element);
+      const entries=children(editingPaper);let index=entries.indexOf(item.kind==='image'?item.source:item.element);
       if(index<0)index=entries.findIndex(n=>signature(n)===item.sig);
       if(index<0)index=item.index;
       if(index<0||index>=entries.length)return;
@@ -389,6 +512,8 @@
   }
   function getTarget(node){
     if(!(node instanceof Element)||!editingPaper.contains(node))return null;
+    const image=imageFromElement(node);
+    if(image)return image;
     const sticker=node.closest('.free-sticker');
     if(sticker)return {kind:'sticker',key:sticker.dataset.stickerId,element:sticker};
     const art=node.closest('[data-art-item]');
@@ -406,6 +531,7 @@
     return null;
   }
   function positionFor(item){
+    if(item.kind==='image')return findBlock(item.source)||{x:0,y:0};
     if(item.kind==='sticker')return layout.stickers.find(s=>s.id===item.key)||{x:0,y:0};
     if(item.kind==='decor'||item.kind==='art')return layout.decor[item.key]||{x:0,y:0};
     const list=children(editingPaper),i=list.indexOf(item.element),s=signature(item.element);
@@ -414,6 +540,7 @@
   // Los avisos de movimiento no se muestran en la interfaz.
   function showHint(){}
   function begin(item,ev){
+    if(item.kind==='image'){beginImage(item,ev);return}
     if(item.kind==='block'&&!root?.contains(item.element))return;
     imageDrag=null;
     let p=positionFor(item),free=item.kind==='block'&&(isFloating(p)||item.convert);
@@ -567,6 +694,7 @@
     const target=getTarget(ev.target);
     if(target?.kind==='sticker')selectedFree={kind:'sticker',key:target.key};
     else if(target?.kind==='art')selectedFree={kind:'art',key:target.key};
+    else if(target?.kind==='image')selectedFree={kind:'block',element:target.source};
     else if(target?.kind==='block')selectedFree=isFloating(positionFor(target))?{kind:'block',element:target.element}:null;
     else if(!active)selectedFree=null;
   });
@@ -601,6 +729,7 @@
   // Un emoji dentro de un párrafo sí puede extraerse de manera independiente.
   editingPaper.addEventListener('dblclick',ev=>{
     if(ev.button!==0)return;
+    if(imageFromElement(ev.target)){ev.preventDefault();return}
     if(active){ev.preventDefault();finish(true);return}
     const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
     if(!source)return;
@@ -634,93 +763,80 @@
     // y se puede volver a activar tras cualquier cantidad de desplazamientos.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
-  // Las imágenes se pueden arrastrar directamente. Un clic izquierdo sin
-  // movimiento conserva la selección normal de Tiptap para editar la imagen.
-  // Al alcanzar unos píxeles de desplazamiento, el gesto pasa a colocación
-  // libre: no dependemos de que el navegador reconozca el doble clic derecho.
+  // Arrastre verdadero mediante réplica en capa libre, como texto/emoji.
+  // Pointer capture mantiene el seguimiento aunque se salga de la imagen.
   editingPaper.addEventListener('pointerdown',event=>{
     if(event.pointerType==='touch')return;
-    const imageNode=event.target instanceof Element
-      ?event.target.closest('#editor .tiptap > img'):null;
-    const item=imageNode?{kind:'block',element:imageNode}:getTarget(event.target);
-    const isImage=item?.kind==='block'&&item.element.tagName==='IMG';
-    if(event.button===0&&isImage){
-      pendingImageDrag={pointerId:event.pointerId,item,startX:event.clientX,startY:event.clientY};
-      if(active?.kind==='block'&&active.element===item.element){
-        // La imagen ya estaba activa tras un doble clic: moverla desde aquí.
-        event.preventDefault();event.stopImmediatePropagation();
-        active.originX=active.x;active.originY=active.y;
-        active.startX=event.clientX;active.startY=event.clientY;
-        imageDrag={pointerId:event.pointerId,button:0,moved:false,startX:event.clientX,startY:event.clientY};
-        pendingImageDrag=null;
-        try{editingPaper.setPointerCapture(event.pointerId)}catch{}
-      }
+    const item=getTarget(event.target);
+    if(event.button===0&&item?.kind==='image'){
+      event.preventDefault();event.stopImmediatePropagation();
+      if(active)finish(true);
+      beginImage(item,event);
+      if(!active)return;
+      imageDrag={pointerId:event.pointerId,button:0,moved:false,
+        startX:event.clientX,startY:event.clientY};
+      try{editingPaper.setPointerCapture(event.pointerId)}catch{}
       return;
     }
     if(event.button!==2||!item)return;
-    if(isImage){event.preventDefault();event.stopImmediatePropagation()}
+    if(item.kind==='image'){event.preventDefault();event.stopImmediatePropagation()}
     const now=performance.now();
-    const same=lastRight&&lastRight.kind===item.kind&&lastRight.key===(item.key||'')&&lastRight.element===item.element;
-    const repeated=same&&now-lastRight.time<720&&Math.hypot(event.clientX-lastRight.x,event.clientY-lastRight.y)<42;
-    lastRight={time:now,x:event.clientX,y:event.clientY,kind:item.kind,key:item.key||'',element:item.element};
+    const same=lastRight&&lastRight.kind===item.kind&&lastRight.key===(item.key||'')&&
+      (item.kind==='image'?lastRight.source===item.source:lastRight.element===item.element);
+    const repeated=same&&now-lastRight.time<740&&
+      Math.hypot(event.clientX-lastRight.x,event.clientY-lastRight.y)<44;
+    lastRight={time:now,x:event.clientX,y:event.clientY,kind:item.kind,
+      key:item.key||'',element:item.element,source:item.source};
     if(!repeated)return;
     lastRight=null;
     event.preventDefault();event.stopImmediatePropagation();
     if(active)finish(true);
     else{
-      begin(isImage?{...item,convert:true}:item,event);
-      if(isImage){
-        imageDrag={pointerId:event.pointerId,button:2,moved:false,startX:event.clientX,startY:event.clientY};
+      begin(item,event);
+      if(item.kind==='image'){
+        imageDrag={pointerId:event.pointerId,button:2,moved:false,
+          startX:event.clientX,startY:event.clientY};
         try{editingPaper.setPointerCapture(event.pointerId)}catch{}
       }
     }
   },true);
-  // Evitar que ProseMirror inicie su gesto de selección cuando ya movemos
-  // la imagen; fuera del arrastre sigue permitiéndose hacer clic para editar.
+  editingPaper.addEventListener('dragstart',event=>{
+    if(imageFromElement(event.target))event.preventDefault();
+  },true);
   editingPaper.addEventListener('mousedown',event=>{
-    if(event.button===2&&event.target instanceof Element&&event.target.closest('#editor .tiptap img')){
+    if(imageFromElement(event.target)){
       event.preventDefault();event.stopImmediatePropagation();
     }
-    if(imageDrag?.button===0){event.preventDefault();event.stopImmediatePropagation()}
   },true);
   editingPaper.addEventListener('contextmenu',event=>{
     if(getTarget(event.target)||active)event.preventDefault();
   },true);
   document.addEventListener('pointermove',event=>{
-    if(event.pointerType==='touch')return;
-    const candidate=pendingImageDrag;
-    if(candidate&&event.pointerId===candidate.pointerId&&
-      Math.hypot(event.clientX-candidate.startX,event.clientY-candidate.startY)>5){
-      pendingImageDrag=null;
-      if(candidate.item.element.isConnected){
-        if(active)finish(true);
-        begin({...candidate.item,convert:true},{clientX:candidate.startX,clientY:candidate.startY});
-        imageDrag={pointerId:event.pointerId,button:0,moved:true,startX:candidate.startX,startY:candidate.startY};
-        try{editingPaper.setPointerCapture(event.pointerId)}catch{}
-      }
-    }
-    if(!active)return;
+    if(event.pointerType==='touch'||!active)return;
     refreshActive();
-    const point=clampToPaper(active,active.originX+event.clientX-active.startX,active.originY+event.clientY-active.startY);
+    const point=clampToPaper(active,active.originX+event.clientX-active.startX,
+      active.originY+event.clientY-active.startY);
     active.x=point.x;active.y=point.y;
     transform(active.element,active.x,active.y);
     if(imageDrag&&imageDrag.pointerId===event.pointerId&&
-      Math.hypot(event.clientX-imageDrag.startX,event.clientY-imageDrag.startY)>4)imageDrag.moved=true;
+      Math.hypot(event.clientX-imageDrag.startX,event.clientY-imageDrag.startY)>3)
+      imageDrag.moved=true;
   },true);
   document.addEventListener('pointerup',event=>{
-    if(pendingImageDrag?.pointerId===event.pointerId)pendingImageDrag=null;
     if(!imageDrag||event.pointerId!==imageDrag.pointerId||event.button!==imageDrag.button)return;
-    const wasDragging=imageDrag.moved;
-    const button=imageDrag.button;
+    const wasDragging=imageDrag.moved,button=imageDrag.button;
     imageDrag=null;
-    if(active&&(button===0||wasDragging))finish(true);
+    if(active?.kind==='image'){
+      const source=active.source;
+      if(button===0||wasDragging)finish(true);
+      if(button===0&&!wasDragging)selectImageSource(source);
+    }
     if(editingPaper.hasPointerCapture?.(event.pointerId)){
       try{editingPaper.releasePointerCapture(event.pointerId)}catch{}
     }
   },true);
   document.addEventListener('pointercancel',event=>{
-    if(pendingImageDrag?.pointerId===event.pointerId)pendingImageDrag=null;
-    if(imageDrag?.pointerId===event.pointerId){imageDrag=null;if(active)finish(true)}
+    if(imageDrag?.pointerId===event.pointerId){imageDrag=null;if(active?.kind==='image')finish(true)}
   },true);
   document.addEventListener('keydown',event=>{
     if(!active)return;
@@ -795,6 +911,7 @@
       if(frame)return;
       frame=requestAnimationFrame(()=>{frame=0;if(!active)apply(editingPaper)});
     });observer.observe(root,{childList:true,characterData:true,subtree:true})}
+    window.addEventListener('resize',()=>{if(!active)apply(editingPaper)},{passive:true});
     window.addEventListener('emletter:art-rendered',()=>{
       if(active?.kind!=='art')apply(editingPaper);
       apply(readingPaper);
