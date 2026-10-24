@@ -905,12 +905,24 @@
     resume(){apply(editingPaper)}
   };
   window.EmLetterPlacement=api;
+  // Este archivo se carga antes que app.js. Tiptap aún no existe cuando
+  // termina de parsearse el HTML; iniciar una sola vez en DOMContentLoaded
+  // dejaba `root` en null permanentemente y todas las imágenes inmóviles.
+  // La aplicación emite emletter:art-ready DESPUÉS de crear .tiptap.
+  let initialized=false;
   function init(){
-    root=document.querySelector('#editor .tiptap');
-    if(root){observer=new MutationObserver(()=>{
+    const editorRoot=document.querySelector('#editor .tiptap');
+    if(!editorRoot)return;
+    if(initialized&&root===editorRoot)return;
+    if(observer)observer.disconnect();
+    root=editorRoot;
+    observer=new MutationObserver(()=>{
       if(frame)return;
       frame=requestAnimationFrame(()=>{frame=0;if(!active)apply(editingPaper)});
-    });observer.observe(root,{childList:true,characterData:true,subtree:true})}
+    });
+    observer.observe(root,{childList:true,characterData:true,subtree:true});
+    if(initialized){apply(editingPaper);return}
+    initialized=true;
     window.addEventListener('resize',()=>{if(!active)apply(editingPaper)},{passive:true});
     window.addEventListener('emletter:art-rendered',()=>{
       if(active?.kind!=='art')apply(editingPaper);
@@ -923,5 +935,7 @@
       else api.resume();
     },0)});
   }
+  // DOMContentLoaded solo garantiza el HTML, no la instancia de Tiptap.
+  window.addEventListener('emletter:art-ready',init);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
