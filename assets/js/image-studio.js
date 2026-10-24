@@ -11,7 +11,7 @@
   const sliders=['brightness','contrast','saturation','tolerance','brush'];
   const MAX_DATA_URL=148000; // El enlace compartido también contiene esta imagen.
   let original=null,mask=null,maskContext=null,mode='',dirty=false;
-  let pending=0,processing=false,sourceKind='',imagePosition=null;
+  let pending=0,processing=false,sourceKind='',imagePosition=null,imageOriginalSrc=null;
   let undo=[],pointerId=null,lastPoint=null,rect={x:0,y:0,w:1,h:1};
   let imageSource='';
   function setNote(text){note.textContent=text}
@@ -234,8 +234,10 @@
   const add=document.getElementById('add-image');
   add?.addEventListener('click',()=>{
     const editor=document.querySelector('#editor .tiptap')?.editor;
-    const selected=editor?.isActive('image');
-    imagePosition=selected?editor.state.selection.from:null;
+    const position=editor?.state?.selection?.from;
+    const selectedNode=Number.isInteger(position)?editor.state.doc.nodeAt(position):null;
+    imagePosition=selectedNode?.type?.name==='image'?position:null;
+    imageOriginalSrc=imagePosition!==null?selectedNode.attrs.src:null;
     // El manejador de la aplicación rellena primero el formulario y abre el diálogo.
     setTimeout(()=>{
       resetOptions();setError('');fileInput.value='';
@@ -258,7 +260,12 @@
         src=url.origin===location.origin?url.href:`https://wsrv.nl/?url=${encodeURIComponent(url.href)}&output=png`;
       }else src=editableDataUrl();
       const attrs={src,alt:$('image-alt').value.slice(0,300),imageWidth:Number($('image-width').value),imageRadius:Number($('image-radius').value),imageAlign:$('image-align').value};
-      if(imagePosition!==null){
+      // Una carta puede cambiar mientras se edita el archivo (vista previa,
+      // arrastre o reescritura). No reusar nunca una posición antigua si el
+      // nodo original ya no existe en el documento actual.
+      const current=imagePosition!==null&&imagePosition>=0&&imagePosition<editor.state.doc.content.size
+        ?editor.state.doc.nodeAt(imagePosition):null;
+      if(current?.type?.name==='image'&&current.attrs.src===imageOriginalSrc){
         editor.chain().focus().setNodeSelection(imagePosition).updateAttributes('image',attrs).run();
       }else editor.chain().focus().setImage(attrs).run();
       dialog.close();
