@@ -64,7 +64,9 @@
     central:'.ornament-symbol',
     lineLeft:'.ornament-top .ornament-line:first-child',
     lineRight:'.ornament-top .ornament-line:last-child',
-    final:'.end-ornament',
+    finalLineLeft:'.end-ornament .end-ornament-line:first-child',
+    final:'.end-ornament [data-end-ornament]',
+    finalLineRight:'.end-ornament .end-ornament-line:last-child',
     signature:'.letter-signature',
     frameTop:'.frame-top',frameRight:'.frame-right',
     frameBottom:'.frame-bottom',frameLeft:'.frame-left'
@@ -380,12 +382,25 @@
     const art=node.closest('[data-art-item]');
     if(art&&artKeys.has(art.dataset.artItem)&&!art.hidden&&editingPaper.dataset.artActive==='true')
       return {kind:'art',key:art.dataset.artItem,element:art};
-    // El ornamento de cabecera se mueve como una unidad. Sus líneas y
-    // símbolo continúan perteneciendo al mismo conjunto, incluso tras soltarlo.
-    const top=node.closest('.ornament-top');
-    if(top && editingPaper.querySelector('.ornament-top')===top)
-      return {kind:'decor',key:'ornament',element:top};
-    const decor=node.closest('.end-ornament,.letter-signature,.frame-side');
+    const topPart=node.closest('.ornament-top .ornament-line,.ornament-top .ornament-symbol');
+    if(topPart&&editingPaper.contains(topPart)){
+      const left=editingPaper.querySelector('.ornament-top .ornament-line:first-child');
+      const center=editingPaper.querySelector('.ornament-top .ornament-symbol');
+      const right=editingPaper.querySelector('.ornament-top .ornament-line:last-child');
+      if(topPart===left)return {kind:'decor',key:'lineLeft',element:topPart};
+      if(topPart===center)return {kind:'decor',key:'central',element:topPart};
+      if(topPart===right)return {kind:'decor',key:'lineRight',element:topPart};
+    }
+    const endPart=node.closest('.end-ornament .end-ornament-line,.end-ornament .end-ornament-symbol');
+    if(endPart&&editingPaper.contains(endPart)){
+      const left=editingPaper.querySelector('.end-ornament .end-ornament-line:first-child');
+      const center=editingPaper.querySelector('.end-ornament [data-end-ornament]');
+      const right=editingPaper.querySelector('.end-ornament .end-ornament-line:last-child');
+      if(endPart===left)return {kind:'decor',key:'finalLineLeft',element:endPart};
+      if(endPart===center)return {kind:'decor',key:'final',element:endPart};
+      if(endPart===right)return {kind:'decor',key:'finalLineRight',element:endPart};
+    }
+    const decor=node.closest('.letter-signature,.frame-side');
     if(decor){
       for(const [key,selector]of Object.entries(decorations)){
         if(editingPaper.querySelector(selector)===decor)return {kind:'decor',key,element:decor};
@@ -628,7 +643,7 @@
     if(!dbl)return;
     lastRight=null;
     if(active)finish(true);
-    else if(item)begin(item,event);
+    else if(item)begin(item.kind==='block'&&item.element.tagName==='IMG'?{...item,convert:true}:item,event);
   });
   document.addEventListener('pointermove',event=>{
     if(!active||event.pointerType==='touch')return;
