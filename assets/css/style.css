@@ -1223,3 +1223,38 @@ body.no-ornaments .paper .end-ornament{display:none!important}
 #edit-paper .ornament.ornament-top.free-moving,
 #edit-paper .end-ornament.free-moving,
 #edit-paper #editor .tiptap>img.free-moving{pointer-events:auto!important}
+
+
+/* Movimiento independiente de los ornamentos, sin convertir sus grupos en una sola pieza. */
+#edit-paper .ornament-top > :is(.ornament-line,.ornament-symbol),
+#edit-paper .end-ornament > :is(.end-ornament-line,.end-ornament-symbol){
+  cursor:grab;touch-action:manipulation;pointer-events:auto;
+}
+#edit-paper .ornament-top > :is(.ornament-line,.ornament-symbol):is(.free-moving,.free-placed),
+#edit-paper .end-ornament > :is(.end-ornament-line,.end-ornament-symbol):is(.free-moving,.free-placed){
+  position:relative!important;z-index:21!important;
+}
+#edit-paper .ornament-top > :is(.ornament-line,.ornament-symbol).free-moving,
+#edit-paper .end-ornament > :is(.end-ornament-line,.end-ornament-symbol).free-moving{
+  display:inline-flex!important;pointer-events:auto!important;cursor:grabbing;
+}
+.paper .end-ornament{display:flex;align-items:center;justify-content:center;gap:18px}
+.paper .end-ornament-symbol{color:inherit;line-height:1;text-shadow:inherit;display:inline-flex;align-items:center;justify-content:center;min-width:1.2em}
+.paper .end-ornament-line{display:none;flex:0 1 min(125px,32%);height:1px;min-width:28px;background:linear-gradient(90deg,transparent,var(--ornament-color));box-shadow:0 0 var(--ornament-glow) var(--ornament-color)}
+.paper .end-ornament-line.end-ornament-right{transform:scaleX(-1)}
+/* Celebración utiliza estas DOS líneas físicas en vez de pseudo-elementos.
+   Así se pueden mover ambas por separado, incluso después de soltarlas. */
+.paper[data-art-active="true"].art-bottom-lines > .end-ornament::before,
+.paper[data-art-active="true"].art-bottom-lines > .end-ornament::after{display:none!important}
+.paper[data-art-active="true"].art-bottom-lines > .end-ornament > .end-ornament-line{display:block}
+/* La línea derecha se refleja por su degradado sin reemplazar el transform del arrastre. */
+.paper[data-art-active="true"].art-bottom-lines > .end-ornament > .end-ornament-right{background:linear-gradient(90deg,var(--ornament-color),transparent);transform:none}
+#edit-paper #editor .tiptap > img{cursor:grab;touch-action:manipulation;-webkit-user-drag:none}
+#edit-paper #editor .tiptap > img.free-moving{cursor:grabbing;pointer-events:auto!important}
+/* Área de selección cómoda para líneas decorativas de un solo píxel.
+   No cambia su grosor visible ni el degradado. */
+#edit-paper .end-ornament > .end-ornament-line{position:relative}
+#edit-paper .end-ornament > .end-ornament-line::after{
+  content:"";position:absolute;left:0;right:0;top:-10px;bottom:-10px;
+  cursor:grab;
+}
