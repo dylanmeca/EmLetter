@@ -1272,3 +1272,32 @@ body.no-ornaments .paper .end-ornament{display:none!important}
   position:absolute!important;pointer-events:auto!important;cursor:grabbing;
   outline:2px dashed #bacbff!important;outline-offset:5px;z-index:12!important;
 }
+
+/* Ornamentación: área real de selección de 22px sobre trazos finos,
+   sin alterar su grosor visual ni el estilo del dibujo. */
+#edit-paper .ornament-top > .ornament-line{
+  position:relative;overflow:visible;
+}
+#edit-paper .ornament-top > .ornament-line::after{
+  content:"";position:absolute;left:0;right:0;top:-11px;bottom:-11px;
+  pointer-events:auto;cursor:grab;
+}
+/* Mantener las seis piezas seleccionables aunque se superpongan con texto. */
+#edit-paper .ornament-top > :is(.ornament-line,.ornament-symbol),
+#edit-paper .end-ornament > :is(.end-ornament-line,.end-ornament-symbol){
+  position:relative;touch-action:none;
+}
+/* El editor Tiptap forma su propia capa (isolation:isolate). Si una pieza
+   sale de su zona original, esa capa la tapa e impide volver a cogerla.
+   Elevar el grupo completo sin capturar clics fuera de sus seis piezas. */
+#edit-paper > .ornament.ornament-top,
+#edit-paper > .end-ornament{
+  position:relative;
+  z-index:11;
+  pointer-events:none;
+  overflow:visible;
+}
+#edit-paper > .ornament.ornament-top > :is(.ornament-line,.ornament-symbol),
+#edit-paper > .end-ornament > :is(.end-ornament-line,.end-ornament-symbol){
+  pointer-events:auto;
+}
