@@ -59,6 +59,7 @@
   let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
   // Captura propia del gesto: Tiptap no debe robar el arrastre de las imágenes.
   let imageDrag=null;
+  let ornamentDrag=null, ornamentFront=30, ornamentAltPick=null;
   const isFloating=b=>Boolean(b&&typeof b.s==='string'&&b.s.startsWith('!'));
   const rawSignature=b=>isFloating(b)?b.s.slice(1):b?.s;
   const nextSignature=(n,free)=> (free?'!':'')+signature(n);
@@ -510,6 +511,43 @@
     }
     changed();
   }
+  // Piezas independientes de los adornos: incluso superpuestas conservan
+  // áreas de arrastre y pueden recuperarse mediante Alt + arrastrar.
+  const ornamentKeys=['lineLeft','central','lineRight','finalLineLeft','final','finalLineRight'];
+  function ornamentItemFromNode(node){
+    if(!(node instanceof Element))return null;
+    for(const key of ornamentKeys){
+      const element=editingPaper.querySelector(decorations[key]);
+      if(element&&(node===element||element.contains(node)))return {kind:'decor',key,element};
+    }
+    return null;
+  }
+  function ornamentAtPointer(event){
+    const ordinary=ornamentItemFromNode(event.target);
+    if(!event.altKey)return ordinary;
+    const x=event.clientX,y=event.clientY;
+    const candidates=ornamentKeys.map(key=>({key,element:editingPaper.querySelector(decorations[key])}))
+      .filter(({element})=>{
+        if(!element||getComputedStyle(element).display==='none')return false;
+        const box=element.getBoundingClientRect();
+        return x>=box.left-4&&x<=box.right+4&&y>=box.top-10&&y<=box.bottom+10;
+      }).map(({key,element})=>({kind:'decor',key,element}));
+    if(candidates.length<2)return ordinary;
+    // Alterna entre piezas apiladas para recuperar la que queda detrás.
+    const same=ornamentAltPick&&Math.hypot(ornamentAltPick.x-x,ornamentAltPick.y-y)<22&&
+      performance.now()-ornamentAltPick.time<3500;
+    const front=ordinary?candidates.findIndex(item=>item.key===ordinary.key):-1;
+    const next=same?(ornamentAltPick.index+1)%candidates.length:(front+1+candidates.length)%candidates.length;
+    ornamentAltPick={x,y,time:performance.now(),index:next};
+    return candidates[next];
+  }
+  function raiseOrnament(item){
+    if(item?.kind!=='decor'||!ornamentKeys.includes(item.key))return;
+    // z-index 21 de .free-placed tenía !important y dependía del orden DOM:
+    // una pieza desplazada podía quedar para siempre debajo de otra.
+    ornamentFront=Math.min(9000,ornamentFront+1);
+    item.element.style.setProperty('z-index',String(ornamentFront),'important');
+  }
   function getTarget(node){
     if(!(node instanceof Element)||!editingPaper.contains(node))return null;
     const image=imageFromElement(node);
@@ -568,6 +606,7 @@
     active={...item,free,index:item.kind==='block'?children(editingPaper).indexOf(item.element):-1,sig:item.kind==='block'?signature(item.element):'',x:p.x,y:p.y,startX:ev.clientX,startY:ev.clientY,originX:p.x,originY:p.y};
     document.body.classList.add('placing-element');
     if(item.kind==='block')paintBlocks();else item.element.classList.add('free-moving');
+    raiseOrnament(item);
   }
   function finish(commit=true){
     if(!active)return;
@@ -733,7 +772,7 @@
     if(active){ev.preventDefault();finish(true);return}
     const source=ev.target instanceof Element?ev.target:ev.target?.parentElement;
     if(!source)return;
-    const item=getTarget(source);
+    const item=(ev.altKey?ornamentAtPointer(ev):null)||getTarget(source);
     if(item?.kind==='sticker'||item?.kind==='decor'||item?.kind==='art'){
       ev.preventDefault();begin(item,ev);return;
     }
@@ -763,6 +802,41 @@
     // y se puede volver a activar tras cualquier cantidad de desplazamientos.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
+  // Arrastre directo, como el de las imágenes libres: el doble clic clásico
+  // se mantiene, pero una pieza desplazada se puede volver a coger siempre.
+  // No se activa hasta mover 5px, para no interferir con doble clic normal.
+  editingPaper.addEventListener('pointerdown',event=>{
+    if(event.button!==0||event.pointerType==='touch')return;
+    const item=ornamentAtPointer(event);
+    if(!item)return;
+    ornamentDrag={pointerId:event.pointerId,item,startX:event.clientX,startY:event.clientY,moved:false};
+    event.preventDefault();
+  },true);
+  document.addEventListener('pointermove',event=>{
+    if(!ornamentDrag||ornamentDrag.pointerId!==event.pointerId)return;
+    const gesture=ornamentDrag;
+    if(!gesture.moved){
+      if(Math.hypot(event.clientX-gesture.startX,event.clientY-gesture.startY)<5)return;
+      gesture.moved=true;
+      if(active)finish(true);
+      begin(gesture.item,{clientX:gesture.startX,clientY:gesture.startY});
+    }
+    if(!active||active.element!==gesture.item.element)return;
+    const point=clampToPaper(active,active.originX+event.clientX-active.startX,
+      active.originY+event.clientY-active.startY);
+    active.x=point.x;active.y=point.y;
+    transform(active.element,active.x,active.y);
+    event.preventDefault();
+  },true);
+  document.addEventListener('pointerup',event=>{
+    if(!ornamentDrag||ornamentDrag.pointerId!==event.pointerId)return;
+    const gesture=ornamentDrag;
+    ornamentDrag=null;
+    if(gesture.moved&&active?.element===gesture.item.element)finish(true);
+  },true);
+  document.addEventListener('pointercancel',event=>{
+    if(ornamentDrag?.pointerId===event.pointerId){ornamentDrag=null;if(active?.kind==='decor')finish(true)}
+  },true);
   // Arrastre verdadero mediante réplica en capa libre, como texto/emoji.
   // Pointer capture mantiene el seguimiento aunque se salga de la imagen.
   editingPaper.addEventListener('pointerdown',event=>{
