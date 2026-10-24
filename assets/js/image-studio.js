@@ -67,6 +67,7 @@
   let imageSource='';
   let drawFrame=0;
   let applyingPreset=false;
+  let autoMaskApplied=false;
 
   function setNote(text){if(note)note.textContent=text||''}
   function setError(text){if(error)error.textContent=text||''}
@@ -102,11 +103,13 @@
       setOutput(id,sliderConfig[id].value);
     }
     if(filterPreset)filterPreset.value='none';
-    if(tintColor)tintColor.value='#ff4f7b';
-    if(glowColor)glowColor.value='#ff5e95';
+    if(tintColor)tintColor.value='#913B49';
+    if(glowColor)glowColor.value='#B51F52';
+    const autoStrength=$('image-studio-auto-strength');if(autoStrength)autoStrength.value='65';
+    const autoOutput=$('image-studio-auto-strength-value');if(autoOutput)autoOutput.textContent='65';
     crop.value='original';
     shape.value='rectangle';
-    dirty=false;undo=[];pointerId=null;
+    dirty=false;undo=[];pointerId=null;autoMaskApplied=false;
     setMode('');
     updatePreviewFrame();
   }
@@ -208,6 +211,99 @@
     return {x:(w-cw)/2,y:(h-ch)/2,w:cw,h:ch};
   }
 
+  // La imagen de ejemplo no tiene transparencia: las esquinas oscuras forman
+  // parte del PNG. Sólo un recorte real puede producir un halo de silueta.
+  // Se elimina únicamente el color de fondo conectado al borde, no las zonas
+  // oscuras interiores (pelo, gafas, accesorios...).
+  function removeOuterBackground({automatic=false}={}){
+    if(!original||!maskContext)return false;
+    const w=original.width,h=original.height;
+    const src=original.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+    const maskData=maskContext.getImageData(0,0,w,h),dst=maskData.data;
+    const total=w*h;
+    const palette=[];
+    const offset=Math.min(3,Math.floor(Math.min(w,h)*.025));
+    for(const [x,y] of [[offset,offset],[w-1-offset,offset],[offset,h-1-offset],[w-1-offset,h-1-offset]]){
+      const i=(y*w+x)*4;
+      if(src[i+3]>180)palette.push([src[i],src[i+1],src[i+2]]);
+    }
+    if(!palette.length)return false;
+    let existingTransparent=0;
+    for(let i=3;i<src.length;i+=4)if(src[i]<80)existingTransparent++;
+    if(automatic&&existingTransparent/total>.08)return false;
+    const tolerance=Number($('image-studio-auto-strength')?.value||65);
+    const dist=(i,c)=>Math.sqrt(.33*(src[i]-c[0])**2+.5*(src[i+1]-c[1])**2+.17*(src[i+2]-c[2])**2);
+    const qualifies=idx=>{
+      const i=idx*4;
+      if(src[i+3]<80)return true;
+      let best=Infinity;
+      for(const c of palette)best=Math.min(best,dist(i,c));
+      return best<=tolerance;
+    };
+    const visited=new Uint8Array(total),removed=new Uint8Array(total);
+    const queue=new Int32Array(total);
+    let head=0,tail=0,removedCount=0;
+    const enqueue=idx=>{
+      if(!visited[idx]&&qualifies(idx)){
+        visited[idx]=1;queue[tail++]=idx;
+      }
+    };
+    for(let x=0;x<w;x++){enqueue(x);enqueue((h-1)*w+x)}
+    for(let y=0;y<h;y++){enqueue(y*w);enqueue(y*w+w-1)}
+    while(head<tail){
+      const idx=queue[head++];
+      removed[idx]=1;removedCount++;
+      const x=idx%w,y=Math.floor(idx/w);
+      if(x>0)enqueue(idx-1);
+      if(x<w-1)enqueue(idx+1);
+      if(y>0)enqueue(idx-w);
+      if(y<h-1)enqueue(idx+w);
+    }
+    if(removedCount<Math.max(6,total*.008)||removedCount>total*.9)return false;
+    // Fondos oscuros y accesorios oscuros pueden estar conectados en la foto.
+    // En iconos aproximadamente circulares, proteger el interior estimado
+    // evita agujeros en gafas, cabello o facciones del rostro.
+    let strongCount=0,fx0=w,fx1=0,fy0=h,fy1=0;
+    for(let i=0;i<total;i++){
+      const k=i*4;
+      let best=Infinity;
+      for(const c of palette)best=Math.min(best,dist(k,c));
+      if(best<tolerance+55||src[k+3]<160)continue;
+      const x=i%w,y=Math.floor(i/w);
+      strongCount++;fx0=Math.min(fx0,x);fx1=Math.max(fx1,x);
+      fy0=Math.min(fy0,y);fy1=Math.max(fy1,y);
+    }
+    const fw=Math.max(1,fx1-fx0),fh=Math.max(1,fy1-fy0);
+    const nearCircle=fw/fh>.72&&fw/fh<1.38&&strongCount/Math.max(1,fw*fh)>.42;
+    const ecx=(fx0+fx1)/2,ecy=(fy0+fy1)/2,rx=fw*.5,ry=fh*.5;
+    const protectedPixel=i=>{
+      if(!nearCircle)return false;
+      const x=i%w,y=Math.floor(i/w);
+      return ((x-ecx)/rx)**2+((y-ecy)/ry)**2<.92;
+    };
+    history();
+    for(let i=0;i<total;i++){
+      if(removed[i]&&!protectedPixel(i)){dst[i*4+3]=0;continue}
+      if(removed[i]&&protectedPixel(i)){removed[i]=0;}
+
+      if(dst[i*4+3]===0)continue;
+      const x=i%w,y=Math.floor(i/w);
+      let touches=false;
+      for(let dy=-1;dy<=1&&!touches;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          const nx=x+dx,ny=y+dy;
+          if(nx>=0&&ny>=0&&nx<w&&ny<h&&removed[ny*w+nx]){touches=true;break}
+        }
+      }
+      if(touches)dst[i*4+3]=Math.min(dst[i*4+3],215);
+    }
+    maskContext.putImageData(maskData,0,0);
+    autoMaskApplied=true;
+    scheduleRender();
+    if(!automatic)setNote('Fondo separado. Puedes afinar los bordes con el borrador o deshacer.');
+    return true;
+  }
+
   function applyWarmTint(ctx,w,h){
     const warmth=getSlider('warmth');
     const tint=getSlider('tint');
@@ -291,7 +387,7 @@
     return tinted;
   }
 
-  function drawAura(ctx,subject,bounds,glow,color){
+  function drawAura(ctx,subject,bounds,glow,color,ox=0,oy=0){
     if(glow<=0)return;
     const rgb=hexToRgb(color);
     const silhouette=makeTintedSilhouette(subject,color);
@@ -301,13 +397,13 @@
     ctx.globalAlpha=.28+.14*haloStrength;
     ctx.shadowColor=`rgba(${rgb.r},${rgb.g},${rgb.b},0.98)`;
     ctx.shadowBlur=glow*2.1;
-    ctx.drawImage(silhouette,0,0);
+    ctx.drawImage(silhouette,ox,oy);
     ctx.globalAlpha=.4+.16*haloStrength;
     ctx.shadowBlur=glow*1.25;
-    ctx.drawImage(silhouette,0,0);
+    ctx.drawImage(silhouette,ox,oy);
     ctx.globalAlpha=.3;
     ctx.shadowBlur=glow*.72;
-    ctx.drawImage(silhouette,0,0);
+    ctx.drawImage(silhouette,ox,oy);
     ctx.restore();
 
     const halo=ctx.createRadialGradient(bounds.cx,bounds.cy,Math.min(bounds.width,bounds.height)*0.12,bounds.cx,bounds.cy,Math.max(bounds.width,bounds.height)*0.88+glow*1.8);
@@ -338,13 +434,13 @@
     ctx.restore();
   }
 
-  function drawBloomHighlights(ctx,subject,glow){
+  function drawBloomHighlights(ctx,subject,glow,ox=0,oy=0){
     if(glow<=0)return;
     ctx.save();
     ctx.globalCompositeOperation='screen';
     ctx.globalAlpha=Math.min(.36,.14+glow/180);
     ctx.filter=`blur(${Math.max(4,glow*.28)}px) brightness(1.35)`;
-    ctx.drawImage(subject,0,0);
+    ctx.drawImage(subject,ox,oy);
     ctx.restore();
   }
 
@@ -355,9 +451,10 @@
     for(let i=0;i<count;i++){
       const px=((i*73)%100)/100;
       const py=((i*41+17)%100)/100;
-      const x=w*(0.14+0.72*px);
-      const y=h*(0.12+0.76*py);
-      const size=4+((i*29)%6)+count*.14;
+      const box=bounds||{minX:w*.14,minY:h*.12,maxX:w*.86,maxY:h*.88};
+      const x=Math.max(3,Math.min(w-3,box.minX+(box.maxX-box.minX)*(px*1.22-.11)));
+      const y=Math.max(3,Math.min(h-3,box.minY+(box.maxY-box.minY)*(py*1.3-.15)));
+      const size=(4+((i*29)%6)+count*.14)*Math.max(.42,Math.min(1.1,Math.min(w,h)/380));
       const alpha=.34+((i*11)%50)/100;
       ctx.strokeStyle=`rgba(${rgb.r},${rgb.g},${rgb.b},${Math.min(.92,alpha)})`;
       ctx.fillStyle=`rgba(255,255,255,${Math.min(.95,alpha+.15)})`;
@@ -372,47 +469,81 @@
     ctx.restore();
   }
 
-  function drawVignette(ctx,w,h,amount){
-    if(amount<=0)return;
-    const strength=amount/100;
-    const gradient=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.18,w/2,h/2,Math.max(w,h)*0.74);
-    gradient.addColorStop(0,'rgba(0,0,0,0)');
-    gradient.addColorStop(.7,`rgba(36,0,12,${strength*.22})`);
-    gradient.addColorStop(1,`rgba(0,0,0,${strength*.62})`);
-    ctx.save();ctx.fillStyle=gradient;ctx.fillRect(0,0,w,h);ctx.restore();
+  function drawOrbit(ctx,bounds,color,glow){
+    if(glow<=0)return;
+    const rgb=hexToRgb(color);
+    const w=ctx.canvas.width,h=ctx.canvas.height;
+    const cx=bounds.cx,cy=Math.min(h*.78,bounds.cy+bounds.height*.2);
+    const rx=Math.min((w-8)/2,Math.max(12,bounds.width*.65+glow*.9));
+    const ry=Math.min((h-10)/2,Math.max(10,bounds.height*.25));
+    ctx.save();
+    ctx.translate(cx,cy);ctx.rotate(-.13);
+    ctx.strokeStyle=`rgba(${rgb.r},${rgb.g},${rgb.b},.32)`;
+    ctx.lineWidth=Math.max(.75,Math.min(1.4,w/440));
+    ctx.shadowColor=color;ctx.shadowBlur=glow*.9;
+    ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,Math.PI*.03,Math.PI*.93);ctx.stroke();
+    ctx.strokeStyle=`rgba(${rgb.r},${rgb.g},${rgb.b},.22)`;
+    ctx.beginPath();ctx.ellipse(0,0,rx*.88,ry*.8,0,Math.PI*1.02,Math.PI*1.87);ctx.stroke();
+    ctx.restore();
   }
 
+  function drawVignette(ctx,w,h,amount,subject=null,ox=0,oy=0){
+    if(amount<=0||!subject)return;
+    const strength=amount/100;
+    const overlay=document.createElement('canvas');overlay.width=w;overlay.height=h;
+    const c=overlay.getContext('2d');
+    const grad=c.createRadialGradient(w/2,h/2,Math.min(w,h)*.18,w/2,h/2,Math.max(w,h)*.65);
+    grad.addColorStop(0,'rgba(0,0,0,0)');
+    grad.addColorStop(.65,`rgba(36,0,12,${strength*.22})`);
+    grad.addColorStop(1,`rgba(0,0,0,${strength*.68})`);
+    c.fillStyle=grad;c.fillRect(0,0,w,h);
+    // Nunca generar un rectángulo negro: la viñeta sólo afecta al sujeto.
+    c.globalCompositeOperation='destination-in';
+    c.drawImage(subject,ox,oy);
+    ctx.drawImage(overlay,0,0);
+  }
+
+  // La previsualización y la exportación llaman a esta misma función.
+  // Se añade un margen transparente para que el halo, órbitas y destellos
+  // no se recorten en el borde cuadrado del archivo original.
   function paint(target,limit){
     const {subject,cut}=makeSubject(limit);
-    target.width=subject.width;target.height=subject.height;
-    const ctx=target.getContext('2d',{willReadFrequently:true});
-    const w=target.width,h=target.height;
-    const bounds=getAlphaBounds(subject);
-    ctx.clearRect(0,0,w,h);
-
-    const glow=getSlider('glow');
-    const sparkles=getSlider('sparkles');
-    const vignette=getSlider('vignette');
-    const glowHex=glowColor?.value||'#ff5e95';
-    const tintHex=tintColor?.value||'#ff4f7b';
-    const glowRgb=hexToRgb(glowHex);
+    const sw=subject.width,sh=subject.height;
+    const glow=getSlider('glow'),sparkles=getSlider('sparkles'),vignette=getSlider('vignette');
+    const glowHex=glowColor?.value||'#B51F52';
+    const tintHex=tintColor?.value||'#913B49';
     const tintRgb=hexToRgb(tintHex);
+    const minSide=Math.min(sw,sh);
+    const scale=Math.max(.28,minSide/650);
+    const glowPx=glow*scale;
+    const margin=(glow||sparkles)?Math.ceil(minSide*Math.min(.26,.045+glow/245+(sparkles>0?.045:0))):0;
+    const w=target.width=sw+2*margin,h=target.height=sh+2*margin;
+    const ox=margin,oy=margin;
+    const ctx=target.getContext('2d',{willReadFrequently:true});
+    ctx.clearRect(0,0,w,h);
+    const rawBounds=getAlphaBounds(subject);
+    const bounds={...rawBounds,minX:rawBounds.minX+ox,maxX:rawBounds.maxX+ox,
+      minY:rawBounds.minY+oy,maxY:rawBounds.maxY+oy,
+      cx:rawBounds.cx+ox,cy:rawBounds.cy+oy};
 
     if(glow>0){
-      const radial=ctx.createRadialGradient(bounds.cx,bounds.cy,Math.min(bounds.width,bounds.height)*0.08,bounds.cx,bounds.cy,Math.max(bounds.width,bounds.height)*0.92+glow*1.6);
-      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.48,.18+glow/82)})`);
-      radial.addColorStop(.46,`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${Math.min(.3,.1+glow/130)})`);
+      // El resplandor sigue la máscara del personaje, nunca los cuatro lados
+      // del archivo original cuando el fondo se ha quitado.
+      drawAura(ctx,subject,bounds,glowPx,glowHex,ox,oy);
+      drawBaseHalo(ctx,bounds,glowHex,glowPx);
+      if(sparkles>0)drawOrbit(ctx,bounds,glowHex,glowPx);
+      const radial=ctx.createRadialGradient(bounds.cx,bounds.cy,Math.min(bounds.width,bounds.height)*.13,
+        bounds.cx,bounds.cy,Math.max(bounds.width,bounds.height)*.78);
+      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.4,.1+glow/145)})`);
+      radial.addColorStop(.47,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.18,.03+glow/310)})`);
       radial.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=radial;ctx.fillRect(0,0,w,h);
-      drawAura(ctx,subject,bounds,glow,glowHex);
-      drawBaseHalo(ctx,bounds,glowHex,glow);
+      ctx.save();ctx.globalCompositeOperation='screen';ctx.fillStyle=radial;ctx.fillRect(0,0,w,h);ctx.restore();
     }
-
-    ctx.drawImage(subject,0,0);
-    if(glow>0)drawBloomHighlights(ctx,subject,glow);
+    ctx.drawImage(subject,ox,oy);
+    if(glow>0)drawBloomHighlights(ctx,subject,glowPx,ox,oy);
     drawSparkles(ctx,w,h,sparkles,glowHex,bounds);
-    drawVignette(ctx,w,h,vignette);
-    return cut;
+    drawVignette(ctx,w,h,vignette,subject,ox,oy);
+    return {...cut,offsetX:ox,offsetY:oy,subjectW:sw,subjectH:sh};
   }
 
   function render(){
@@ -438,18 +569,25 @@
       }
     }
     applyingPreset=false;
+    if((name==='avatar'||name==='romance')&&!autoMaskApplied)removeOuterBackground({automatic:true});
     scheduleRender();
   }
 
   function toSourcePoint(event){
     const b=canvas.getBoundingClientRect();
-    const rx=(event.clientX-b.left)/b.width,ry=(event.clientY-b.top)/b.height;
+    if(!b.width||!b.height||!original)return null;
+    const cx=(event.clientX-b.left)/b.width*canvas.width;
+    const cy=(event.clientY-b.top)/b.height*canvas.height;
+    const rx=(cx-(rect.offsetX||0))/Math.max(1,rect.subjectW||canvas.width);
+    const ry=(cy-(rect.offsetY||0))/Math.max(1,rect.subjectH||canvas.height);
     if(!Number.isFinite(rx)||!Number.isFinite(ry)||rx<0||ry<0||rx>1||ry>1)return null;
-    return {x:Math.min(original.width-1,Math.max(0,Math.floor(rect.x+rect.w*rx))),y:Math.min(original.height-1,Math.max(0,Math.floor(rect.y+rect.h*ry)))};
+    return {x:Math.min(original.width-1,Math.max(0,Math.floor(rect.x+rect.w*rx))),
+      y:Math.min(original.height-1,Math.max(0,Math.floor(rect.y+rect.h*ry)))};
   }
+
   function history(){if(!mask)return;undo.push(maskContext.getImageData(0,0,mask.width,mask.height));if(undo.length>8)undo.shift();dirty=true}
   function eraseBrush(point,previous){
-    const radius=getSlider('brush')*Math.max(1,original.width/canvas.width)*.55;
+    const radius=getSlider('brush')*Math.max(1,original.width/(rect.subjectW||canvas.width))*.55;
     maskContext.save();maskContext.globalCompositeOperation='destination-out';
     maskContext.lineWidth=radius*2;maskContext.lineCap='round';
     maskContext.beginPath();maskContext.moveTo(previous?.x??point.x,previous?.y??point.y);
@@ -508,6 +646,8 @@
   tintColor?.addEventListener('input',()=>{if(filterPreset&&!applyingPreset)filterPreset.value='custom';scheduleRender()});
   glowColor?.addEventListener('input',()=>{if(filterPreset&&!applyingPreset)filterPreset.value='custom';scheduleRender()});
   filterPreset?.addEventListener('change',()=>applyPreset(filterPreset.value));
+  $('image-studio-auto-strength')?.addEventListener('input',event=>{const out=$('image-studio-auto-strength-value');if(out)out.textContent=event.target.value});
+  $('image-studio-auto')?.addEventListener('click',()=>{if(original&&!removeOuterBackground())setNote('No se pudo separar este fondo automáticamente. Usa el borrador manual.')});
 
   $('image-width')?.addEventListener('input',event=>{const out=$('image-width-value');if(out)out.textContent=`${event.target.value}%`;updatePreviewFrame()});
   $('image-radius')?.addEventListener('input',event=>{const out=$('image-radius-value');if(out)out.textContent=`${event.target.value} px`;updatePreviewFrame()});
@@ -520,7 +660,7 @@
   $('image-studio-undo').onclick=()=>{
     if(!undo.length||!maskContext)return;
     maskContext.putImageData(undo.pop(),0,0);
-    dirty=undo.length>0;scheduleRender();
+    dirty=undo.length>0;autoMaskApplied=false;scheduleRender();
   };
 
   canvas.addEventListener('pointerdown',event=>{
