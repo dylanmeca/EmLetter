@@ -14,13 +14,14 @@
     if(!item?.element)return {x:nx,y:ny};
     const mobile=window.matchMedia('(max-width:760px)').matches;
     const isDecoration=item.kind==='art'||item.kind==='decor';
-    if(!mobile&&!isDecoration)return {x:nx,y:ny};
+    const isImage=item.kind==='block'&&item.element.tagName==='IMG';
+    if(!mobile&&!isDecoration&&!isImage)return {x:nx,y:ny};
     const paper=editingPaper;
     const w=paper.clientWidth;
     const rect=item.element.getBoundingClientRect();
     const width=Math.max(1,Math.min(w,rect.width||40));
     if(item.kind==='sticker')return {x:Math.max(0,Math.min(nx,w-width-4)),y:ny};
-    if(item.kind==='block'){
+    if(item.kind==='block'&&!isImage){
       const contentWidth=root?.clientWidth||w;
       return {x:Math.max(0,Math.min(nx,contentWidth-width)),y:ny};
     }
@@ -33,7 +34,7 @@
     const currentY=active?.element===item.element?active.y:(positionFor(item)?.y||0);
     const originalLeft=rect.left-paperRect.left-currentX;
     const originalTop=rect.top-paperRect.top-currentY;
-    const visible=Math.min(16,Math.max(7,width*.35));
+    const visible=isImage?Math.min(48,Math.max(24,width*.18)):Math.min(16,Math.max(7,width*.35));
     const minX=visible-width-originalLeft;
     const maxX=w-visible-originalLeft;
     const height=Math.max(1,rect.height||22);
@@ -49,7 +50,7 @@
   let layout=zero(),active=null,lastRight=null,observer=null,frame=0;
   let selectedFree=null; // La barra utiliza el elemento libre seleccionado, no la selección anterior.
   // Captura propia del gesto: Tiptap no debe robar el arrastre de las imágenes.
-  let imageDrag=null;
+  let imageDrag=null, pendingImageDrag=null;
   const isFloating=b=>Boolean(b&&typeof b.s==='string'&&b.s.startsWith('!'));
   const rawSignature=b=>isFloating(b)?b.s.slice(1):b?.s;
   const nextSignature=(n,free)=> (free?'!':'')+signature(n);
@@ -633,36 +634,34 @@
     // y se puede volver a activar tras cualquier cantidad de desplazamientos.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
-  // Doble clic DERECHO: detectar el gesto desde pointerdown, antes de que
-  // ProseMirror seleccione o inicie su drag-and-drop nativo. El primer clic
-  // derecho se conserva como gesto normal; el segundo convierte la imagen
-  // real en posición libre y permite arrastrarla SIN duplicarla.
+  // Las imágenes se pueden arrastrar directamente. Un clic izquierdo sin
+  // movimiento conserva la selección normal de Tiptap para editar la imagen.
+  // Al alcanzar unos píxeles de desplazamiento, el gesto pasa a colocación
+  // libre: no dependemos de que el navegador reconozca el doble clic derecho.
   editingPaper.addEventListener('pointerdown',event=>{
-    if(event.pointerType!=='mouse')return;
-    const item=getTarget(event.target);
+    if(event.pointerType==='touch')return;
+    const imageNode=event.target instanceof Element
+      ?event.target.closest('#editor .tiptap > img'):null;
+    const item=imageNode?{kind:'block',element:imageNode}:getTarget(event.target);
     const isImage=item?.kind==='block'&&item.element.tagName==='IMG';
-
-    // Tras activarla, arrastrar manteniendo el botón izquierdo también debe
-    // funcionar. Evitar el mousedown de Tiptap (selección/arrastre nativo).
-    if(event.button===0&&active?.kind==='block'&&active.element.tagName==='IMG'&&
-      isImage&&(item.element===active.element||signature(item.element)===active.sig)){
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      refreshActive();
-      active.startX=event.clientX;
-      active.startY=event.clientY;
-      active.originX=active.x;
-      active.originY=active.y;
-      imageDrag={pointerId:event.pointerId,button:0,moved:false,startX:event.clientX,startY:event.clientY};
-      try{editingPaper.setPointerCapture(event.pointerId)}catch{}
+    if(event.button===0&&isImage){
+      pendingImageDrag={pointerId:event.pointerId,item,startX:event.clientX,startY:event.clientY};
+      if(active?.kind==='block'&&active.element===item.element){
+        // La imagen ya estaba activa tras un doble clic: moverla desde aquí.
+        event.preventDefault();event.stopImmediatePropagation();
+        active.originX=active.x;active.originY=active.y;
+        active.startX=event.clientX;active.startY=event.clientY;
+        imageDrag={pointerId:event.pointerId,button:0,moved:false,startX:event.clientX,startY:event.clientY};
+        pendingImageDrag=null;
+        try{editingPaper.setPointerCapture(event.pointerId)}catch{}
+      }
       return;
     }
     if(event.button!==2||!item)return;
-    // En imágenes ignorar también el primer clic derecho de ProseMirror.
     if(isImage){event.preventDefault();event.stopImmediatePropagation()}
     const now=performance.now();
     const same=lastRight&&lastRight.kind===item.kind&&lastRight.key===(item.key||'')&&lastRight.element===item.element;
-    const repeated=same&&now-lastRight.time<680&&Math.hypot(event.clientX-lastRight.x,event.clientY-lastRight.y)<35;
+    const repeated=same&&now-lastRight.time<720&&Math.hypot(event.clientX-lastRight.x,event.clientY-lastRight.y)<42;
     lastRight={time:now,x:event.clientX,y:event.clientY,kind:item.kind,key:item.key||'',element:item.element};
     if(!repeated)return;
     lastRight=null;
@@ -670,39 +669,57 @@
     if(active)finish(true);
     else{
       begin(isImage?{...item,convert:true}:item,event);
-      // El usuario puede mantener el segundo botón derecho presionado y
-      // mover directamente; solo se fija al soltar si hubo desplazamiento.
-      if(isImage)imageDrag={pointerId:event.pointerId,button:2,moved:false,startX:event.clientX,startY:event.clientY};
+      if(isImage){
+        imageDrag={pointerId:event.pointerId,button:2,moved:false,startX:event.clientX,startY:event.clientY};
+        try{editingPaper.setPointerCapture(event.pointerId)}catch{}
+      }
     }
+  },true);
+  // Evitar que ProseMirror inicie su gesto de selección cuando ya movemos
+  // la imagen; fuera del arrastre sigue permitiéndose hacer clic para editar.
+  editingPaper.addEventListener('mousedown',event=>{
+    if(event.button===2&&event.target instanceof Element&&event.target.closest('#editor .tiptap img')){
+      event.preventDefault();event.stopImmediatePropagation();
+    }
+    if(imageDrag?.button===0){event.preventDefault();event.stopImmediatePropagation()}
   },true);
   editingPaper.addEventListener('contextmenu',event=>{
     if(getTarget(event.target)||active)event.preventDefault();
   },true);
   document.addEventListener('pointermove',event=>{
-    if(!active||event.pointerType==='touch')return;
+    if(event.pointerType==='touch')return;
+    const candidate=pendingImageDrag;
+    if(candidate&&event.pointerId===candidate.pointerId&&
+      Math.hypot(event.clientX-candidate.startX,event.clientY-candidate.startY)>5){
+      pendingImageDrag=null;
+      if(candidate.item.element.isConnected){
+        if(active)finish(true);
+        begin({...candidate.item,convert:true},{clientX:candidate.startX,clientY:candidate.startY});
+        imageDrag={pointerId:event.pointerId,button:0,moved:true,startX:candidate.startX,startY:candidate.startY};
+        try{editingPaper.setPointerCapture(event.pointerId)}catch{}
+      }
+    }
+    if(!active)return;
     refreshActive();
-    // Tanto el desplazamiento con el ratón sin pulsar como el arrastre real
-    // con botón pulsado actualizan la misma posición persistida.
     const point=clampToPaper(active,active.originX+event.clientX-active.startX,active.originY+event.clientY-active.startY);
     active.x=point.x;active.y=point.y;
     transform(active.element,active.x,active.y);
     if(imageDrag&&imageDrag.pointerId===event.pointerId&&
       Math.hypot(event.clientX-imageDrag.startX,event.clientY-imageDrag.startY)>4)imageDrag.moved=true;
-  },{passive:true});
+  },true);
   document.addEventListener('pointerup',event=>{
+    if(pendingImageDrag?.pointerId===event.pointerId)pendingImageDrag=null;
     if(!imageDrag||event.pointerId!==imageDrag.pointerId||event.button!==imageDrag.button)return;
     const wasDragging=imageDrag.moved;
     const button=imageDrag.button;
     imageDrag=null;
-    // Con el botón izquierdo se fija al soltar; el segundo clic derecho
-    // solo fija si se movió mientras se mantenía presionado. Un doble clic
-    // derecho rápido sigue dejando el objeto listo para mover con el ratón.
     if(active&&(button===0||wasDragging))finish(true);
-    if(button===0&&editingPaper.hasPointerCapture?.(event.pointerId)){
+    if(editingPaper.hasPointerCapture?.(event.pointerId)){
       try{editingPaper.releasePointerCapture(event.pointerId)}catch{}
     }
   },true);
   document.addEventListener('pointercancel',event=>{
+    if(pendingImageDrag?.pointerId===event.pointerId)pendingImageDrag=null;
     if(imageDrag?.pointerId===event.pointerId){imageDrag=null;if(active)finish(true)}
   },true);
   document.addEventListener('keydown',event=>{
