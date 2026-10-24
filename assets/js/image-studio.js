@@ -6,6 +6,7 @@
   if(!dialog||!form)return;
   const $=id=>document.getElementById(id);
   const canvas=$('image-studio-canvas'),empty=$('image-studio-empty'),fallback=$('image-studio-fallback'),note=$('image-studio-note');
+  const preview=canvas?.closest('.image-studio-preview');
   const fileInput=$('image-studio-file'),urlInput=$('image-url'),error=$('image-error');
   const crop=$('image-studio-crop'),shape=$('image-studio-shape');
   const sliders=['brightness','contrast','saturation','tolerance','brush'];
@@ -14,8 +15,26 @@
   let pending=0,processing=false,sourceKind='',imagePosition=null,imageOriginalSrc=null;
   let undo=[],pointerId=null,lastPoint=null,rect={x:0,y:0,w:1,h:1};
   let imageSource='';
-  function setNote(text){note.textContent=text}
+  function setNote(text){if(note)note.textContent=text||''}
   function setError(text){error.textContent=text||''}
+  function updatePreviewFrame(){
+    if(!preview)return;
+    const widthControl=$('image-width');
+    const radiusControl=$('image-radius');
+    const alignControl=$('image-align');
+    const widthValue=Math.max(10,Math.min(100,Number(widthControl?.value||100)));
+    const radiusValue=Math.max(0,Math.min(60,Number(radiusControl?.value||0)));
+    const alignValue=(alignControl?.value||'center');
+    preview.dataset.align=alignValue;
+    const widthCss=`${widthValue}%`;
+    for(const target of [canvas,fallback]){
+      if(!target)continue;
+      target.style.width=widthCss;
+      target.style.maxWidth=widthCss;
+      target.style.borderRadius=`${radiusValue}px`;
+    }
+  }
+
   function resetOptions(){
     for(const id of sliders){
       const input=$(`image-studio-${id}`);
@@ -24,6 +43,7 @@
     }
     crop.value='original';shape.value='rectangle';dirty=false;undo=[];pointerId=null;
     setMode('');
+    updatePreviewFrame();
   }
   function setMode(value){
     mode=mode===value?'':value;
@@ -33,11 +53,9 @@
       button.classList.toggle('is-active',mode===kind);
     }
     canvas.classList.toggle('image-studio-working',Boolean(mode));
-    if(mode==='pick')setNote('Haz clic sobre un color del fondo para quitar solo su zona conectada.');
-    else if(mode==='erase')setNote('Arrastra el dedo o el ratón sobre el fondo que quieras borrar.');
-    else setNote('Puedes recortar y ajustar la imagen o eliminar zonas del fondo antes de aplicar.');
+    setNote('');
   }
-  function clearImage(){original=null;mask=null;maskContext=null;imageSource='';sourceKind='';canvas.width=1;canvas.height=1;canvas.hidden=true;empty.hidden=false;if(fallback){fallback.hidden=true;fallback.removeAttribute('src')}}
+  function clearImage(){original=null;mask=null;maskContext=null;imageSource='';sourceKind='';canvas.width=1;canvas.height=1;canvas.hidden=true;empty.hidden=false;if(fallback){fallback.hidden=true;fallback.removeAttribute('src')}updatePreviewFrame()}
   function fit(w,h,limit=1100){const ratio=Math.min(1,limit/Math.max(w,h));return {w:Math.max(1,Math.round(w*ratio)),h:Math.max(1,Math.round(h*ratio))}}
   function upload(file){
     if(!file)return;
@@ -79,7 +97,7 @@
       mask=document.createElement('canvas');mask.width=size.w;mask.height=size.h;
       maskContext=mask.getContext('2d',{willReadFrequently:true});maskContext.fillStyle='#fff';maskContext.fillRect(0,0,size.w,size.h);
       sourceKind=kind;imageSource=src;canvas.hidden=false;empty.hidden=true;if(fallback){fallback.hidden=true;fallback.removeAttribute('src')}
-      render();setMode('');setNote('Previsualización lista. Ajusta o elimina partes del fondo antes de aplicar.');
+      render();setMode('');setNote('');
     }catch(err){
       if(token!==pending)return;
       if(kind==='url'&&/^https?:\/\//i.test(src)){
@@ -90,7 +108,7 @@
         setError('Esta URL no permite editar píxeles desde el navegador. Aún puedes insertarla con los controles básicos, o subir el archivo para recortar y quitar fondo.');
       }else{
         setError('No se pudo procesar esta imagen.');
-        clearImage();setNote('Utiliza una imagen JPG, PNG o WebP válida.');
+        clearImage();setNote('');
       }
     }finally{if(token===pending)processing=false}
   }
@@ -125,6 +143,7 @@
     if(!original)return;
     const cut=paint(canvas,650);
     rect={...cut};
+    updatePreviewFrame();
   }
   function scheduleRender(){
     if(drawFrame)return;
@@ -196,6 +215,9 @@
       if(['brightness','contrast','saturation'].includes(id))scheduleRender();
     });
   }
+  $('image-width')?.addEventListener('input',e=>{const out=$('image-width-value');if(out)out.textContent=`${e.target.value}%`;updatePreviewFrame()});
+  $('image-radius')?.addEventListener('input',e=>{const out=$('image-radius-value');if(out)out.textContent=`${e.target.value} px`;updatePreviewFrame()});
+  $('image-align')?.addEventListener('change',updatePreviewFrame);
   crop.addEventListener('change',scheduleRender);shape.addEventListener('change',scheduleRender);
   $('image-studio-pick').onclick=()=>setMode('pick');
   $('image-studio-erase').onclick=()=>setMode('erase');
@@ -240,7 +262,7 @@
     imageOriginalSrc=imagePosition!==null?selectedNode.attrs.src:null;
     // El manejador de la aplicación rellena primero el formulario y abre el diálogo.
     setTimeout(()=>{
-      resetOptions();setError('');fileInput.value='';
+      resetOptions();setError('');fileInput.value='';updatePreviewFrame();
       const url=urlInput.value.trim();if(/^data:image\//.test(url)){urlInput.value='';loadImage(url,'file')}else if(url)loadImage(url,'url');else clearImage();
     },0);
   },true);
