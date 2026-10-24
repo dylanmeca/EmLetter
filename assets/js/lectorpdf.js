@@ -951,10 +951,9 @@
     }
   }
 
-  // La seguridad de la copia no depende de volver a renderizarla con PDF.js.
-  // El PDF se crea desde cero y SOLO recibe imágenes rasterizadas, nunca
-  // fuentes, texto, anotaciones ni objetos del archivo original. Después se
-  // reabre con el mismo serializador para comprobar que la copia es válida.
+  // El PDF de salida se crea desde cero. Las imágenes ya censuradas son su
+  // única fuente visual y el texto OCR se deriva EXCLUSIVAMENTE de esos píxeles
+  // sanitizados: nunca se reutilizan fuentes, texto ni objetos del PDF original.
   // Volver a abrirla en el worker de PDF.js puede fallar por memoria o por la
   // implementación del visor, aunque el PDF ya se haya generado correctamente.
   async function verifySanitizedPdf(bytes, expectedPages, PDFDocument, imageCount, redactionCount) {
@@ -996,6 +995,62 @@
     return state.exportLibPromise;
   }
 
+  // OCR DE LA COPIA CENSURADA: nunca se reconoce el PDF original para exportar.
+  // Tesseract 7 devuelve bboxes en píxeles con origen superior izquierdo;
+  // las páginas exportadas son imágenes a tamaño visible, con la rotación ya
+  // aplicada, de modo que no se necesita trasladar coordenadas del PDF fuente.
+  function safeOcrText(font, value) {
+    const raw = String(value || "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+    if (!raw) return "";
+    try { font.encodeText(raw); return raw; } catch (_) { /* Alfabeto no WinAnsi */ }
+    // Helvetica estándar admite español e inglés. Omitimos símbolos no
+    // codificables, sin permitir que un solo glifo invalide toda la exportación.
+    let result = "";
+    for (const char of raw) {
+      try { font.encodeText(char); result += char; } catch (_) {}
+    }
+    return result.trim();
+  }
+
+  function overlapsCensoredArea(box, redactedRects) {
+    // Rechazar la palabra completa aunque solo roce la censura: nunca
+    // incrustar texto parcial cuya caja toque una barra negra.
+    return redactedRects.some((rect) =>
+      Math.min(box.x1, rect.right) > Math.max(box.x0, rect.left) &&
+      Math.min(box.y1, rect.bottom) > Math.max(box.y0, rect.top));
+  }
+
+  function addSanitizedOcrLayer(output, data, font, bitmapWidth, bitmapHeight, redactedRects) {
+    const sx = output.getWidth() / bitmapWidth;
+    const sy = output.getHeight() / bitmapHeight;
+    let count = 0;
+    const blocks = Array.isArray(data?.blocks) ? data.blocks : [];
+    for (const block of blocks) for (const paragraph of block.paragraphs || [])
+      for (const line of paragraph.lines || []) for (const word of line.words || []) {
+        const b = word.bbox;
+        if (!b || ![b.x0, b.y0, b.x1, b.y1].every(Number.isFinite) ||
+            b.x0 < 0 || b.y0 < 0 || b.x1 > bitmapWidth || b.y1 > bitmapHeight ||
+            b.x1 <= b.x0 || b.y1 <= b.y0 || overlapsCensoredArea(b, redactedRects)) continue;
+        const value = safeOcrText(font, word.text);
+        if (!value) continue;
+        const maxWidth = (b.x1 - b.x0) * sx;
+        const boxHeight = (b.y1 - b.y0) * sy;
+        let size = clamp(boxHeight * .85, 2, 60);
+        const measured = font.widthOfTextAtSize(value, size);
+        if (measured > maxWidth && measured > 0) size = Math.max(1.5, size * maxWidth / measured);
+        if (!Number.isFinite(size) || size < 1.5) continue;
+        // Opacidad cero: PDF buscable/seleccionable sin alterar lo que se ve.
+        // La esquina inferior se convierte del origen superior de Tesseract.
+        output.drawText(value, {
+          x: b.x0 * sx,
+          y: output.getHeight() - b.y1 * sy + Math.max(0, (boxHeight - size) * .2),
+          size, font, opacity: 0,
+        });
+        count++;
+      }
+    return count;
+  }
+
   async function exportRedactedPdf() {
     if (!state.pdf || state.exporting || !hasRedactions()) return;
     const original = state.pdf;
@@ -1003,12 +1058,22 @@
     updateUI();
     clearError();
     let stage = "cargar el generador de PDF";
+    let exportOcrWorker = null;
     try {
-      setLoading("Preparando PDF censurado…");
-      const { PDFDocument } = await importPdfLib();
+      setLoading("Preparando PDF censurado con OCR…");
+      const { PDFDocument, StandardFonts } = await importPdfLib();
       const result = await PDFDocument.create();
+      const font = await result.embedFont(StandardFonts.Helvetica);
+      // El OCR de la vista puede estar desactivado. Esta descarga siempre
+      // reconoce el bitmap ya censurado, de forma independiente y local.
+      stage = "iniciar OCR de la copia censurada";
+      const engine = await loadOcrLibrary();
+      exportOcrWorker = await engine.createWorker(["spa", "eng"], 1, {
+        workerPath: OCR_WORKER, corePath: OCR_CORE, langPath: OCR_LANG,
+      });
       let imageCount = 0;
       let redactionCount = 0;
+      let ocrWordCount = 0;
       for (let number = 1; number <= state.total; number++) {
         stage = `renderizar la página ${number}`;
         setLoading(`Censurando página ${number} de ${state.total}…`);
@@ -1028,6 +1093,7 @@
         try {
           await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
           const boxes = state.redactionBoxes.get(number) || [];
+          const redactedRects = [];
           stage = `aplicar las censuras de la página ${number}`;
           for (const box of boxes) {
             const rect = viewportRect(viewport, box);
@@ -1039,6 +1105,8 @@
             const right = Math.ceil(Math.max(rect[0], rect[2])) + guard;
             const bottom = Math.ceil(Math.max(rect[1], rect[3])) + guard;
             destroyRedactedPixels(ctx, left, top, right, bottom);
+            redactedRects.push({ left: Math.max(0, left - 2), top: Math.max(0, top - 2),
+              right: Math.min(canvas.width, right + 2), bottom: Math.min(canvas.height, bottom + 2) });
             // Comprobar un píxel dentro de la zona reemplazada, no solo la
             // existencia de la barra superpuesta en el visor.
             const x = Math.max(0, Math.floor(Math.max(left, 0)));
@@ -1049,8 +1117,13 @@
             }
             redactionCount++;
           }
+          // OCR de la página YA CENSURADA: si una barra negra cubre una palabra,
+          // sus píxeles originales no existen en la entrada de Tesseract.
+          stage = `reconocer texto visible de la página ${number}`;
+          setLoading(`OCR del PDF censurado: página ${number} de ${state.total}…`);
+          const { data: ocrData } = await exportOcrWorker.recognize(canvas, {}, { blocks: true, text: true });
           // Imagen sin pérdida en las páginas censuradas. El PDF original no se
-          // incorpora: la única fuente del documento nuevo es este bitmap.
+          // incorpora: la única fuente visible es este bitmap.
           stage = `codificar la página ${number}`;
           const imageType = boxes.length ? "image/png" : "image/jpeg";
           const blob = await new Promise((resolve, reject) => canvas.toBlob(
@@ -1062,6 +1135,8 @@
             : await result.embedJpg(await blob.arrayBuffer());
           const output = result.addPage([base.width, base.height]);
           output.drawImage(img, { x: 0, y: 0, width: base.width, height: base.height });
+          ocrWordCount += addSanitizedOcrLayer(output, ocrData, font,
+            canvas.width, canvas.height, redactedRects);
           imageCount++;
         } finally {
           canvas.width = canvas.height = 0;
@@ -1078,16 +1153,17 @@
       const link = document.createElement("a");
       link.href = objectUrl;
       // Evitar revelar datos privados que puedan figurar en el nombre original.
-      link.download = "documento-censurado.pdf";
+      link.download = "documento-censurado-con-ocr.pdf";
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-      setStatus(`Página ${state.page} de ${state.total}`);
+      setStatus(`PDF censurado con OCR descargado · ${ocrWordCount} palabras reconocidas`);
     } catch (error) {
       console.error(`EmLetter: error al ${stage}:`, error);
       showError(`No se pudo ${stage}. No se descargó ningún archivo. Revisa la consola para ver el motivo.`);
     } finally {
+      if (exportOcrWorker) try { await exportOcrWorker.terminate(); } catch (_) {}
       state.exporting = false;
       hideLoading();
       updateUI();
