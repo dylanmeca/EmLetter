@@ -28,3 +28,13 @@
 
 #image-dialog .image-studio-preview img#image-studio-fallback{max-width:100%;max-height:360px;object-fit:contain}
 #image-dialog .image-studio-preview :is(img,canvas)[hidden]{display:none!important}
+
+#image-dialog .image-studio-icon-button{display:inline-flex;align-items:center;justify-content:center;min-width:44px;width:44px;height:40px;padding:0;font-size:19px;line-height:1;border-radius:10px;background:#1b2945}
+#image-dialog .image-studio-icon-button span{display:block;transform:translateY(-1px)}
+#image-dialog .image-studio-icon-button.is-active{background:#61478c;color:#fff;border-color:#dbc1ff;box-shadow:0 0 0 1px #dbc1ff44 inset,0 0 12px #bd98ff33}
+
+#image-dialog .image-studio-note:empty{display:none}
+#image-dialog .image-studio-preview[data-align="left"]{justify-content:flex-start}
+#image-dialog .image-studio-preview[data-align="center"]{justify-content:center}
+#image-dialog .image-studio-preview[data-align="right"]{justify-content:flex-end}
+#image-dialog .image-studio-preview :is(canvas,#image-studio-fallback){transition:width .15s ease,border-radius .15s ease,box-shadow .15s ease}
