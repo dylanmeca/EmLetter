@@ -68,3 +68,10 @@
 #image-dialog .image-studio-tools .image-studio-icon-button:hover{background:#293e66;border-color:#89a0d0}
 #image-dialog .image-studio-tools .image-studio-icon-button:is(.is-active,[aria-pressed="true"]){background:#61478c;color:#fff;border-color:#dbc1ff}
 #image-dialog .image-studio-tools .image-studio-icon-button:focus-visible{outline:2px solid #a8c6ff;outline-offset:3px}
+
+#image-dialog .image-studio-row>label>input[type=color]{display:block;width:100%;margin-top:8px;min-height:40px;padding:4px;border-radius:10px;background:#141c32;border:1px solid #45587b}
+#image-dialog .image-studio-row>label>select{display:block;width:100%;margin-top:8px;background:#141c32;color:#eef2ff;border:1px solid #45587b;border-radius:10px;padding:10px}
+#image-dialog .image-studio{box-shadow:0 8px 24px #00000022}
+#image-dialog .image-studio-preview{background-color:#1a1320;background-image:radial-gradient(circle at 50% 50%,#351126 0%,#120818 58%,#090612 100%),linear-gradient(45deg,#322437 25%,transparent 25%),linear-gradient(-45deg,#322437 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#322437 75%),linear-gradient(-45deg,transparent 75%,#322437 75%);background-size:auto,24px 24px,24px 24px,24px 24px,24px 24px;background-position:center,0 0,0 12px,12px -12px,-12px 0}
+#image-dialog .image-studio-preview canvas,#image-dialog .image-studio-preview img#image-studio-fallback{box-shadow:0 16px 34px #0008,0 0 0 1px #ffffff18}
+#image-dialog .image-studio-note{font-size:12px;line-height:1.5;color:#c7d0ee;margin:0}
