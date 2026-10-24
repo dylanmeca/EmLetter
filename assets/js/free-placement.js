@@ -60,11 +60,13 @@
     return layout.blocks[j]||null;
   };
   const decorations={
-    ornament:' .ornament-top',
+    ornament:'.ornament-top', // compatibilidad con enlaces anteriores
     central:'.ornament-symbol',
     lineLeft:'.ornament-top .ornament-line:first-child',
     lineRight:'.ornament-top .ornament-line:last-child',
-    final:'.end-ornament',
+    final:'.end-ornament > .end-ornament-symbol',
+    finalLineLeft:'.end-ornament > .end-ornament-left',
+    finalLineRight:'.end-ornament > .end-ornament-right',
     signature:'.letter-signature',
     frameTop:'.frame-top',frameRight:'.frame-right',
     frameBottom:'.frame-bottom',frameLeft:'.frame-left'
@@ -160,6 +162,15 @@
         const point=Object.hasOwn(value.decor,key)?value.decor[key]:null;
         if(point&&Number.isFinite(point.x)&&Number.isFinite(point.y))clean.decor[key]=artKeys.has(key)?artPoint(point):{x:clamp(point.x),y:clamp(point.y)};
       }
+    }
+    // Los enlaces antiguos desplazaban el adorno superior completo.
+    // Conservamos ese desplazamiento distribuyéndolo entre sus tres piezas.
+    if(clean.decor.ornament){
+      const common=clean.decor.ornament;
+      for(const key of ['lineLeft','central','lineRight']){
+        if(!clean.decor[key])clean.decor[key]={x:common.x,y:common.y};
+      }
+      delete clean.decor.ornament;
     }
     if(Array.isArray(value.stickers))for(const sticker of value.stickers.slice(0,80)){
       if(!sticker||typeof sticker.text!=='string'||!Number.isFinite(sticker.x)||!Number.isFinite(sticker.y))continue;
@@ -380,16 +391,12 @@
     const art=node.closest('[data-art-item]');
     if(art&&artKeys.has(art.dataset.artItem)&&!art.hidden&&editingPaper.dataset.artActive==='true')
       return {kind:'art',key:art.dataset.artItem,element:art};
-    // El ornamento de cabecera se mueve como una unidad. Sus líneas y
-    // símbolo continúan perteneciendo al mismo conjunto, incluso tras soltarlo.
-    const top=node.closest('.ornament-top');
-    if(top && editingPaper.querySelector('.ornament-top')===top)
-      return {kind:'decor',key:'ornament',element:top};
-    const decor=node.closest('.end-ornament,.letter-signature,.frame-side');
-    if(decor){
-      for(const [key,selector]of Object.entries(decorations)){
-        if(editingPaper.querySelector(selector)===decor)return {kind:'decor',key,element:decor};
-      }
+    // El icono y cada línea superior e inferior conservan coordenadas independientes.
+    // No capturamos el contenedor: doble clic sobre una pieza mueve solo esa pieza.
+    const selectors=['lineLeft','central','lineRight','finalLineLeft','final','finalLineRight','signature','frameTop','frameRight','frameBottom','frameLeft'];
+    for(const key of selectors){
+      const element=editingPaper.querySelector(decorations[key]);
+      if(element&&(node===element||element.contains(node)))return {kind:'decor',key,element};
     }
     const parent=node.closest('#editor .tiptap > *');
     if(parent&&eligible(parent))return {kind:'block',element:parent};
@@ -412,9 +419,12 @@
       const box=item.element.getBoundingClientRect(),base=root.getBoundingClientRect();
       // El rectángulo del contenido, no el ancho del párrafo: un título centrado
       // debe quedarse en el mismo lugar cuando pasa a posición libre.
-      const range=document.createRange();range.selectNodeContents(item.element);
-      const textRect=range.getBoundingClientRect();
-      const rect=textRect.width>1&&textRect.height>1?textRect:box;
+      let rect=box;
+      if(item.element.tagName!=='IMG'){
+        const range=document.createRange();range.selectNodeContents(item.element);
+        const textRect=range.getBoundingClientRect();
+        if(textRect.width>1&&textRect.height>1)rect=textRect;
+      }
       const i=children(editingPaper).indexOf(item.element);
       const x=clamp(rect.left-base.left),y=clamp(rect.top-base.top);
       layout.blocks=layout.blocks.filter(b=>b.i!==i);
@@ -578,6 +588,9 @@
     }
     return null;
   }
+  editingPaper.addEventListener('dragstart',event=>{
+    if(event.target instanceof Element&&event.target.closest('#editor .tiptap img'))event.preventDefault();
+  },true);
   // Doble clic izquierdo: mover el contenido REAL de Tiptap, conservando
   // marcas, tipografía, colores, enlaces y edición normal (no se duplica).
   // Un emoji dentro de un párrafo sí puede extraerse de manera independiente.
@@ -616,20 +629,28 @@
     // y se puede volver a activar tras cualquier cantidad de desplazamientos.
     if(item?.kind==='block'){ev.preventDefault();begin({...item,convert:true},ev)}
   });
-  // El doble clic DERECHO activa o fija el elemento, sin abrir ningún menú.
-  editingPaper.addEventListener('contextmenu',event=>{
-    // No abrir menús al pulsar una vez (ni el del navegador ni el anterior).
-    // Un doble clic derecho sigue activando o fijando la colocación libre.
-    event.preventDefault();
+  // Doble clic DERECHO: usar pointerdown en captura ANTES de que Tiptap
+  // cambie la selección o el navegador abra un menú de contexto. Cada imagen
+  // se convierte a libre (convert:true) exactamente igual que con doble clic
+  // izquierdo. Repetir el gesto fija la posición y permite reactivarla siempre.
+  editingPaper.addEventListener('pointerdown',event=>{
+    if(event.pointerType!=='mouse'||event.button!==2)return;
     const item=getTarget(event.target);
+    if(!item)return;
+    event.preventDefault();
+    event.stopPropagation();
     const now=performance.now();
-    const dbl=lastRight&&now-lastRight.time<540&&Math.hypot(lastRight.x-event.clientX,lastRight.y-event.clientY)<28;
-    lastRight={time:now,x:event.clientX,y:event.clientY};
-    if(!dbl)return;
+    const same=lastRight&&lastRight.kind===item.kind&&lastRight.key===(item.key||'')&&lastRight.element===item.element;
+    const repeated=same&&now-lastRight.time<620&&Math.hypot(event.clientX-lastRight.x,event.clientY-lastRight.y)<32;
+    lastRight={time:now,x:event.clientX,y:event.clientY,kind:item.kind,key:item.key||'',element:item.element};
+    if(!repeated)return;
     lastRight=null;
     if(active)finish(true);
-    else if(item)begin(item,event);
-  });
+    else begin(item.kind==='block'&&item.element.tagName==='IMG'?{...item,convert:true}:item,event);
+  },true);
+  editingPaper.addEventListener('contextmenu',event=>{
+    if(getTarget(event.target)||active)event.preventDefault();
+  },true);
   document.addEventListener('pointermove',event=>{
     if(!active||event.pointerType==='touch')return;
     refreshActive();
