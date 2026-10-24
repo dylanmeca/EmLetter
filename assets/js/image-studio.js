@@ -54,9 +54,9 @@
   const allSliders=Object.keys(sliderConfig);
   const presets={
     none:{brightness:100,contrast:100,saturation:100,warmth:0,tint:0,tintColor:'#913B49',glow:0,glowColor:'#B51F52',sparkles:0,vignette:0},
-    romance:{brightness:106,contrast:118,saturation:126,warmth:24,tint:42,tintColor:'#913B49',glow:30,glowColor:'#B51F52',sparkles:10,vignette:18},
-    avatar:{brightness:108,contrast:122,saturation:132,warmth:22,tint:48,tintColor:'#913B49',glow:34,glowColor:'#E25A7A',sparkles:12,vignette:14},
-    neon:{brightness:102,contrast:118,saturation:128,warmth:18,tint:26,tintColor:'#684A80',glow:28,glowColor:'#B566FF',sparkles:14,vignette:12},
+    romance:{brightness:109,contrast:124,saturation:134,warmth:28,tint:50,tintColor:'#913B49',glow:40,glowColor:'#B51F52',sparkles:12,vignette:20},
+    avatar:{brightness:112,contrast:132,saturation:146,warmth:30,tint:60,tintColor:'#913B49',glow:46,glowColor:'#E25A7A',sparkles:15,vignette:16},
+    neon:{brightness:104,contrast:122,saturation:136,warmth:18,tint:30,tintColor:'#684A80',glow:34,glowColor:'#B566FF',sparkles:15,vignette:12},
     dream:{brightness:110,contrast:96,saturation:112,warmth:12,tint:20,tintColor:'#DDD2C3',glow:16,glowColor:'#E7A2B8',sparkles:10,vignette:8},
     dramatic:{brightness:92,contrast:128,saturation:104,warmth:8,tint:18,tintColor:'#663044',glow:14,glowColor:'#913B49',sparkles:3,vignette:34}
   };
@@ -226,7 +226,7 @@
         b=clamp(b-warm*40,0,255);
       }
       if(tintStrength>0){
-        const blend=tintStrength*.42*alpha;
+        const blend=tintStrength*.58*alpha;
         r=clamp(r*(1-blend)+tintRgb.r*blend,0,255);
         g=clamp(g*(1-blend)+tintRgb.g*blend,0,255);
         b=clamp(b*(1-blend)+tintRgb.b*blend,0,255);
@@ -262,7 +262,93 @@
     return {subject,cut};
   }
 
-  function drawSparkles(ctx,w,h,count,color){
+  function getAlphaBounds(source){
+    const w=source.width,h=source.height;
+    const data=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data;
+    let minX=w,minY=h,maxX=0,maxY=0,found=false;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const a=data[(y*w+x)*4+3];
+        if(a>16){
+          found=true;
+          if(x<minX)minX=x;if(y<minY)minY=y;if(x>maxX)maxX=x;if(y>maxY)maxY=y;
+        }
+      }
+    }
+    if(!found)return {minX:0,minY:0,maxX:w,maxY:h,cx:w/2,cy:h/2,width:w,height:h};
+    return {minX,minY,maxX,maxY,cx:(minX+maxX)/2,cy:(minY+maxY)/2,width:Math.max(1,maxX-minX),height:Math.max(1,maxY-minY)};
+  }
+
+  function makeTintedSilhouette(source,color){
+    const tinted=document.createElement('canvas');
+    tinted.width=source.width;tinted.height=source.height;
+    const tctx=tinted.getContext('2d',{willReadFrequently:true});
+    tctx.drawImage(source,0,0);
+    tctx.globalCompositeOperation='source-in';
+    tctx.fillStyle=color;
+    tctx.fillRect(0,0,tinted.width,tinted.height);
+    tctx.globalCompositeOperation='source-over';
+    return tinted;
+  }
+
+  function drawAura(ctx,subject,bounds,glow,color){
+    if(glow<=0)return;
+    const rgb=hexToRgb(color);
+    const silhouette=makeTintedSilhouette(subject,color);
+    const haloStrength=Math.min(1.4,glow/24);
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha=.28+.14*haloStrength;
+    ctx.shadowColor=`rgba(${rgb.r},${rgb.g},${rgb.b},0.98)`;
+    ctx.shadowBlur=glow*2.1;
+    ctx.drawImage(silhouette,0,0);
+    ctx.globalAlpha=.4+.16*haloStrength;
+    ctx.shadowBlur=glow*1.25;
+    ctx.drawImage(silhouette,0,0);
+    ctx.globalAlpha=.3;
+    ctx.shadowBlur=glow*.72;
+    ctx.drawImage(silhouette,0,0);
+    ctx.restore();
+
+    const halo=ctx.createRadialGradient(bounds.cx,bounds.cy,Math.min(bounds.width,bounds.height)*0.12,bounds.cx,bounds.cy,Math.max(bounds.width,bounds.height)*0.88+glow*1.8);
+    halo.addColorStop(0,`rgba(${rgb.r},${rgb.g},${rgb.b},${Math.min(.3,.12+glow/180)})`);
+    halo.addColorStop(.38,`rgba(${rgb.r},${rgb.g},${rgb.b},${Math.min(.26,.08+glow/190)})`);
+    halo.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.fillStyle=halo;
+    ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+    ctx.restore();
+  }
+
+  function drawBaseHalo(ctx,bounds,color,glow){
+    if(glow<=0)return;
+    const rgb=hexToRgb(color);
+    const y=bounds.maxY+Math.max(6,glow*.2);
+    const gradient=ctx.createRadialGradient(bounds.cx,y,Math.max(2,bounds.width*.05),bounds.cx,y,Math.max(bounds.width*.6,bounds.width*.28+glow*2.4));
+    gradient.addColorStop(0,`rgba(${rgb.r},${rgb.g},${rgb.b},${Math.min(.42,.18+glow/120)})`);
+    gradient.addColorStop(.58,`rgba(${rgb.r},${rgb.g},${rgb.b},${Math.min(.18,.06+glow/220)})`);
+    gradient.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.fillStyle=gradient;
+    ctx.beginPath();
+    ctx.ellipse(bounds.cx,y,Math.max(bounds.width*.54,glow*2.6),Math.max(bounds.height*.08,glow*.58),0,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBloomHighlights(ctx,subject,glow){
+    if(glow<=0)return;
+    ctx.save();
+    ctx.globalCompositeOperation='screen';
+    ctx.globalAlpha=Math.min(.36,.14+glow/180);
+    ctx.filter=`blur(${Math.max(4,glow*.28)}px) brightness(1.35)`;
+    ctx.drawImage(subject,0,0);
+    ctx.restore();
+  }
+
+  function drawSparkles(ctx,w,h,count,color,bounds=null){
     if(count<=0)return;
     ctx.save();
     const rgb=hexToRgb(color);
@@ -301,6 +387,7 @@
     target.width=subject.width;target.height=subject.height;
     const ctx=target.getContext('2d',{willReadFrequently:true});
     const w=target.width,h=target.height;
+    const bounds=getAlphaBounds(subject);
     ctx.clearRect(0,0,w,h);
 
     const glow=getSlider('glow');
@@ -312,23 +399,18 @@
     const tintRgb=hexToRgb(tintHex);
 
     if(glow>0){
-      const radial=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.1,w/2,h/2,Math.max(w,h)*0.6);
-      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.38,.12+glow/95)})`);
-      radial.addColorStop(.45,`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${Math.min(.24,.07+glow/150)})`);
+      const radial=ctx.createRadialGradient(bounds.cx,bounds.cy,Math.min(bounds.width,bounds.height)*0.08,bounds.cx,bounds.cy,Math.max(bounds.width,bounds.height)*0.92+glow*1.6);
+      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.48,.18+glow/82)})`);
+      radial.addColorStop(.46,`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${Math.min(.3,.1+glow/130)})`);
       radial.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=radial;ctx.fillRect(0,0,w,h);
-      ctx.save();
-      ctx.globalAlpha=.96;
-      ctx.shadowColor=`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0.95)`;
-      ctx.shadowBlur=glow*1.55;
-      ctx.drawImage(subject,0,0);
-      ctx.shadowBlur=glow*.82;
-      ctx.drawImage(subject,0,0);
-      ctx.restore();
+      drawAura(ctx,subject,bounds,glow,glowHex);
+      drawBaseHalo(ctx,bounds,glowHex,glow);
     }
 
     ctx.drawImage(subject,0,0);
-    drawSparkles(ctx,w,h,sparkles,glowHex);
+    if(glow>0)drawBloomHighlights(ctx,subject,glow);
+    drawSparkles(ctx,w,h,sparkles,glowHex,bounds);
     drawVignette(ctx,w,h,vignette);
     return cut;
   }
