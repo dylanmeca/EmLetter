@@ -5,6 +5,22 @@
   const form=document.getElementById('image-form');
   if(!dialog||!form)return;
   const $=id=>document.getElementById(id);
+  // Respaldo para instalaciones que todavía tengan el HTML anterior en caché:
+  // los cuatro controles se muestran siempre como SVG, sin fuentes externas.
+  const iconSpec={
+    pick:['Quitar fondo por color','<path d="M12 3v3m0 12v3M3 12h3m12 0h3"/><circle cx="12" cy="12" r="4"/><path d="m4 4 2 2m12 12 2 2m0-16-2 2M6 18l-2 2"/>'],
+    erase:['Borrador manual','<path d="m20 20-8.5-8.5m-4.8 8.1-4.4-4.4a2.5 2.5 0 0 1 0-3.5l9.4-9.4a2.5 2.5 0 0 1 3.5 0l6.5 6.5a2.5 2.5 0 0 1 0 3.5l-7.3 7.3H6.7Z"/><path d="M21 20H7"/>'],
+    undo:['Deshacer','<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15.5-6.2L3 13"/>'],
+    reset:['Restablecer','<path d="M3 12a9 9 0 1 0 2.8-6.5L3 8"/><path d="M3 3v5h5"/>']
+  };
+  for(const [action,[label,paths]] of Object.entries(iconSpec)){
+    const button=$(`image-studio-${action}`);
+    if(!button)continue;
+    button.classList.add('image-studio-icon-button');
+    button.setAttribute('aria-label',label);
+    button.title=label;
+    if(!button.querySelector('svg'))button.innerHTML=`<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  }
   const canvas=$('image-studio-canvas'),empty=$('image-studio-empty'),fallback=$('image-studio-fallback'),note=$('image-studio-note');
   const preview=canvas?.closest('.image-studio-preview');
   const fileInput=$('image-studio-file'),urlInput=$('image-url'),error=$('image-error');
