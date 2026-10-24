@@ -1258,3 +1258,17 @@ body.no-ornaments .paper .end-ornament{display:none!important}
   content:"";position:absolute;left:0;right:0;top:-10px;bottom:-10px;
   cursor:grab;
 }
+
+/* Imágenes libres: igual que los textos y emoji, con coordenadas reales en
+   una capa exterior a Tiptap para evitar la selección y el drag nativos. */
+#edit-paper > .free-image-layer{position:absolute;inset:0;z-index:8;pointer-events:none;overflow:visible}
+#edit-paper .free-image-overlay{
+  position:absolute!important;display:block;box-sizing:border-box;height:auto!important;
+  max-width:none!important;min-width:0;margin:0!important;user-select:none;
+  -webkit-user-select:none;-webkit-user-drag:none;touch-action:none;
+  pointer-events:auto!important;cursor:grab;object-fit:contain;
+}
+#edit-paper .free-image-overlay.free-moving{
+  position:absolute!important;pointer-events:auto!important;cursor:grabbing;
+  outline:2px dashed #bacbff!important;outline-offset:5px;z-index:12!important;
+}
