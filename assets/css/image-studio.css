@@ -38,3 +38,33 @@
 #image-dialog .image-studio-preview[data-align="center"]{justify-content:center}
 #image-dialog .image-studio-preview[data-align="right"]{justify-content:flex-end}
 #image-dialog .image-studio-preview :is(canvas,#image-studio-fallback){transition:width .15s ease,border-radius .15s ease,box-shadow .15s ease}
+
+/* Botonera exclusivamente iconográfica, sin dependencias de fuentes/emoji. */
+#image-dialog .image-studio-tools button.image-studio-icon-button{
+  flex:0 0 44px;
+  width:44px;
+  max-width:44px;
+  min-width:44px;
+  height:42px;
+  min-height:42px;
+  padding:9px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#e7ecff;
+  background:#1c2b49;
+  border:1px solid #50648b;
+  border-radius:9px;
+  font:inherit;
+  cursor:pointer;
+}
+#image-dialog .image-studio-tools .image-studio-icon-button svg{
+  display:block;
+  width:23px;
+  height:23px;
+  flex:none;
+  stroke:currentColor;
+}
+#image-dialog .image-studio-tools .image-studio-icon-button:hover{background:#293e66;border-color:#89a0d0}
+#image-dialog .image-studio-tools .image-studio-icon-button:is(.is-active,[aria-pressed="true"]){background:#61478c;color:#fff;border-color:#dbc1ff}
+#image-dialog .image-studio-tools .image-studio-icon-button:focus-visible{outline:2px solid #a8c6ff;outline-offset:3px}
