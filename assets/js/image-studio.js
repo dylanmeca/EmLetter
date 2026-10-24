@@ -53,11 +53,12 @@
   const effectSliders=['warmth','tint','glow','sparkles','vignette'];
   const allSliders=Object.keys(sliderConfig);
   const presets={
-    none:{brightness:100,contrast:100,saturation:100,warmth:0,tint:0,tintColor:'#ff4f7b',glow:0,glowColor:'#ff5e95',sparkles:0,vignette:0},
-    romance:{brightness:104,contrast:109,saturation:116,warmth:28,tint:34,tintColor:'#ff4b6e',glow:22,glowColor:'#ff477e',sparkles:8,vignette:18},
-    neon:{brightness:102,contrast:118,saturation:128,warmth:18,tint:26,tintColor:'#ff39c6',glow:28,glowColor:'#ff59d7',sparkles:14,vignette:12},
-    dream:{brightness:110,contrast:96,saturation:112,warmth:12,tint:20,tintColor:'#ffc1e3',glow:16,glowColor:'#ffd0ef',sparkles:10,vignette:8},
-    dramatic:{brightness:92,contrast:128,saturation:104,warmth:8,tint:14,tintColor:'#a10f35',glow:12,glowColor:'#ff496c',sparkles:3,vignette:34}
+    none:{brightness:100,contrast:100,saturation:100,warmth:0,tint:0,tintColor:'#913B49',glow:0,glowColor:'#B51F52',sparkles:0,vignette:0},
+    romance:{brightness:106,contrast:118,saturation:126,warmth:24,tint:42,tintColor:'#913B49',glow:30,glowColor:'#B51F52',sparkles:10,vignette:18},
+    avatar:{brightness:108,contrast:122,saturation:132,warmth:22,tint:48,tintColor:'#913B49',glow:34,glowColor:'#E25A7A',sparkles:12,vignette:14},
+    neon:{brightness:102,contrast:118,saturation:128,warmth:18,tint:26,tintColor:'#684A80',glow:28,glowColor:'#B566FF',sparkles:14,vignette:12},
+    dream:{brightness:110,contrast:96,saturation:112,warmth:12,tint:20,tintColor:'#DDD2C3',glow:16,glowColor:'#E7A2B8',sparkles:10,vignette:8},
+    dramatic:{brightness:92,contrast:128,saturation:104,warmth:8,tint:18,tintColor:'#663044',glow:14,glowColor:'#913B49',sparkles:3,vignette:34}
   };
 
   let original=null,mask=null,maskContext=null,mode='',dirty=false;
@@ -312,16 +313,16 @@
 
     if(glow>0){
       const radial=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.1,w/2,h/2,Math.max(w,h)*0.6);
-      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.28,.08+glow/120)})`);
-      radial.addColorStop(.45,`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${Math.min(.18,.04+glow/180)})`);
+      radial.addColorStop(0,`rgba(${tintRgb.r},${tintRgb.g},${tintRgb.b},${Math.min(.38,.12+glow/95)})`);
+      radial.addColorStop(.45,`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},${Math.min(.24,.07+glow/150)})`);
       radial.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=radial;ctx.fillRect(0,0,w,h);
       ctx.save();
-      ctx.globalAlpha=.92;
-      ctx.shadowColor=`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0.92)`;
-      ctx.shadowBlur=glow*1.35;
+      ctx.globalAlpha=.96;
+      ctx.shadowColor=`rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0.95)`;
+      ctx.shadowBlur=glow*1.55;
       ctx.drawImage(subject,0,0);
-      ctx.shadowBlur=glow*.62;
+      ctx.shadowBlur=glow*.82;
       ctx.drawImage(subject,0,0);
       ctx.restore();
     }

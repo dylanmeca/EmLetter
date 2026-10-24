@@ -54,7 +54,7 @@
 
   function init() {
     const inputs = [];
-    const colorSelector = '#composer input[type="color"], #atmosphere-dialog input[type="color"]';
+    const colorSelector = '#composer input[type="color"], #atmosphere-dialog input[type="color"], #image-dialog input[type="color"]';
     if (!document.querySelector(colorSelector)) return;
 
     const picker = make('dialog', 'gothic-palette-dialog');
